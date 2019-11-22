@@ -264,6 +264,17 @@ func TestNode_Close(t *testing.T) {
 	}
 }
 
+func TestNode_setReconnecting(t *testing.T) {
+	n := newNode(testDBDriver, testDSN, 1000, 22, 0)
+	tests := []bool{true, true, false, true}
+	for _, b := range tests {
+		n.setReconnecting(b)
+		if n.reconnecting != b {
+			t.Errorf("Node.setReconnecting() got = %v, want %v", n.reconnecting, b)
+		}
+	}
+}
+
 func TestNode_reconnect(t *testing.T) {
 	opened := newNode("sqlite3", "file::memory:?cache=shared", 1000, 22, 5*time.Millisecond)
 	if err := opened.Open(); err != nil {
@@ -307,6 +318,32 @@ func TestNode_reconnect(t *testing.T) {
 			tt.node.reconnect()
 			if (tt.node.db != nil) != tt.wantDB {
 				t.Errorf("Node.Open() DB = %v, wantDB %v", tt.node.db, tt.wantDB)
+			}
+		})
+	}
+}
+
+func TestNode_Reconnecting(t *testing.T) {
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{
+			"true",
+			true,
+		},
+		{
+			"false",
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := &Node{
+				reconnecting: tt.want,
+			}
+			if got := n.Reconnecting(); got != tt.want {
+				t.Errorf("Node.Reconnecting() = %v, want %v", got, tt.want)
 			}
 		})
 	}

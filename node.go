@@ -69,6 +69,7 @@ type Node struct {
 	db             *sql.DB
 	connErr        error
 	reconnectWait  time.Duration
+	reconnecting   bool
 	mtx            sync.RWMutex
 }
 
@@ -115,13 +116,30 @@ func (n *Node) Close() error {
 	return err
 }
 
+func (n *Node) setReconnecting(s bool) {
+	n.mtx.Lock()
+	n.reconnecting = s
+	n.mtx.Unlock()
+}
+
 func (n *Node) reconnect() {
 	for n.reconnectWait != 0 { // 0 means no reconnecting
+		n.setReconnecting(true)
+		defer n.setReconnecting(false)
+
 		time.Sleep(n.reconnectWait)
 		if err := n.Open(); err == nil || err.Error() == ErrAlreadyOpen {
 			return
 		}
 	}
+}
+
+// Reconnecting returns true while reconnecting is in progress
+func (n *Node) Reconnecting() bool {
+	n.mtx.RLock()
+	defer n.mtx.RUnlock()
+
+	return n.reconnecting
 }
 
 // DB returns the raw sql.DB connection object
