@@ -12,8 +12,12 @@ import (
 	"github.com/volatiletech/sqlboiler/boil"
 )
 
-// Interface implementation checks
+const (
+	testDBDriver = "sqlite3"
+	testDSN      = "file::memory:"
+)
 
+// Interface implementation checks
 var (
 	_ = boil.Executor(&Node{})
 	_ = boil.ContextExecutor(&Node{})
@@ -125,7 +129,7 @@ func Test_nodeStats_failed(t *testing.T) {
 	}
 }
 
-// sql.Open(sqlite3, file::memory:?cache=shared)
+// sql.Open(sqlite3,testDSN
 
 func Test_newNode(t *testing.T) {
 	type args struct {
@@ -143,8 +147,8 @@ func Test_newNode(t *testing.T) {
 		{
 			"SQLite3",
 			args{
-				driverName:     "sqlite3",
-				dataSourceName: "file::memory:?cache=shared",
+				driverName:     testDBDriver,
+				dataSourceName: testDSN,
 				statsLen:       1000,
 				failPercent:    22,
 				reconnectWait:  5 * time.Second,
@@ -154,8 +158,8 @@ func Test_newNode(t *testing.T) {
 					failPercent: 22,
 					fails:       make([]bool, 1000),
 				},
-				driverName:     "sqlite3",
-				dataSourceName: "file::memory:?cache=shared",
+				driverName:     testDBDriver,
+				dataSourceName: testDSN,
 				reconnectWait:  5 * time.Second,
 			},
 		},
@@ -183,8 +187,8 @@ func TestNode_Open(t *testing.T) {
 		{
 			"Success",
 			args{
-				driverName:     "sqlite3",
-				dataSourceName: "file::memory:?cache=shared",
+				driverName:     testDBDriver,
+				dataSourceName: testDSN,
 				statsLen:       1000,
 				failPercent:    22,
 				reconnectWait:  5 * time.Second,
@@ -194,8 +198,8 @@ func TestNode_Open(t *testing.T) {
 		{
 			ErrAlreadyOpen,
 			args{
-				driverName:     "sqlite3",
-				dataSourceName: "file::memory:?cache=shared",
+				driverName:     testDBDriver,
+				dataSourceName: testDSN,
 				statsLen:       1000,
 				failPercent:    22,
 				reconnectWait:  5 * time.Second,
@@ -239,12 +243,12 @@ func TestNode_Close(t *testing.T) {
 	}{
 		{
 			"Open",
-			newNode("sqlite3", "file::memory:?cache=shared", 1000, 22, 0),
+			newNode(testDBDriver, testDSN, 1000, 22, 0),
 			false,
 		},
 		{
 			"Closed",
-			newNode("sqlite3", "file::memory:?cache=shared", 1000, 22, 0),
+			newNode(testDBDriver, testDSN, 1000, 22, 0),
 			true,
 		},
 	}
@@ -276,7 +280,7 @@ func TestNode_setReconnecting(t *testing.T) {
 }
 
 func TestNode_reconnect(t *testing.T) {
-	opened := newNode("sqlite3", "file::memory:?cache=shared", 1000, 22, 5*time.Millisecond)
+	opened := newNode(testDBDriver, testDSN, 1000, 22, 5*time.Millisecond)
 	if err := opened.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -287,7 +291,7 @@ func TestNode_reconnect(t *testing.T) {
 	}{
 		{
 			"Close to open",
-			newNode("sqlite3", "file::memory:?cache=shared", 1000, 22, 5*time.Millisecond),
+			newNode(testDBDriver, testDSN, 1000, 22, 5*time.Millisecond),
 			true,
 		},
 		{
@@ -297,7 +301,7 @@ func TestNode_reconnect(t *testing.T) {
 		},
 		{
 			"No reconnect",
-			newNode("sqlite3", "file::memory:?cache=shared", 1000, 22, 0),
+			newNode(testDBDriver, testDSN, 1000, 22, 0),
 			false,
 		},
 		{
@@ -350,7 +354,7 @@ func TestNode_Reconnecting(t *testing.T) {
 }
 
 func TestNode_Misc(t *testing.T) {
-	n := newNode("sqlite3", "file::memory:?cache=shared", 1000, 22, 0)
+	n := newNode(testDBDriver, testDSN, 1000, 22, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -375,7 +379,7 @@ func TestNode_Misc(t *testing.T) {
 }
 
 func TestNode_Err(t *testing.T) {
-	n := newNode("sqlite3", "file::memory:?cache=shared", 1000, 22, 0)
+	n := newNode(testDBDriver, testDSN, 1000, 22, 0)
 	n.setErr(errors.New(ErrAlreadyOpen))
 	err := n.ConnErr()
 	if err == nil || err.Error() != ErrAlreadyOpen {
@@ -387,7 +391,7 @@ func TestNode_Err(t *testing.T) {
 }
 
 func TestNode_checkFailed(t *testing.T) {
-	n := newNode("sqlite3", "file::memory:?cache=shared", 10, 50, 0)
+	n := newNode(testDBDriver, testDSN, 10, 50, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(n)
 	}
@@ -403,7 +407,7 @@ func TestNode_checkFailed(t *testing.T) {
 }
 
 func TestNode_CheckErr(t *testing.T) {
-	n := newNode("sqlite3", "file::memory:?cache=shared", 10, 10, 0)
+	n := newNode(testDBDriver, testDSN, 10, 10, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(n)
 	}
@@ -452,7 +456,7 @@ func TestNode_CheckErr(t *testing.T) {
 }
 
 func TestNode_Exec(t *testing.T) {
-	n := newNode("sqlite3", "file::memory:?cache=shared", 10, 0, 0)
+	n := newNode(testDBDriver, testDSN, 10, 0, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -473,7 +477,7 @@ func TestNode_Exec(t *testing.T) {
 }
 
 func TestNode_Query(t *testing.T) {
-	n := newNode("sqlite3", "file::memory:?cache=shared", 10, 0, 0)
+	n := newNode(testDBDriver, testDSN, 10, 0, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -494,7 +498,7 @@ func TestNode_Query(t *testing.T) {
 }
 
 func TestNode_QueryRow(t *testing.T) {
-	n := newNode("sqlite3", "file::memory:?cache=shared", 10, 0, 0)
+	n := newNode(testDBDriver, testDSN, 10, 0, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -512,7 +516,7 @@ func TestNode_QueryRow(t *testing.T) {
 }
 
 func TestNode_ExecContext(t *testing.T) {
-	n := newNode("sqlite3", "file::memory:?cache=shared", 10, 0, 0)
+	n := newNode(testDBDriver, testDSN, 10, 0, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -533,7 +537,7 @@ func TestNode_ExecContext(t *testing.T) {
 }
 
 func TestNode_QueryContext(t *testing.T) {
-	n := newNode("sqlite3", "file::memory:?cache=shared", 10, 0, 0)
+	n := newNode(testDBDriver, testDSN, 10, 0, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -554,7 +558,7 @@ func TestNode_QueryContext(t *testing.T) {
 }
 
 func TestNode_QueryRowContext(t *testing.T) {
-	n := newNode("sqlite3", "file::memory:?cache=shared", 10, 0, 0)
+	n := newNode(testDBDriver, testDSN, 10, 0, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -572,7 +576,7 @@ func TestNode_QueryRowContext(t *testing.T) {
 }
 
 func TestNode_Begin(t *testing.T) {
-	n := newNode("sqlite3", "file::memory:?cache=shared", 10, 0, 0)
+	n := newNode(testDBDriver, testDSN, 10, 0, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -596,7 +600,7 @@ func TestNode_Begin(t *testing.T) {
 }
 
 func TestNode_BeginTx(t *testing.T) {
-	n := newNode("sqlite3", "file::memory:?cache=shared", 10, 0, 0)
+	n := newNode(testDBDriver, testDSN, 10, 0, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
