@@ -144,6 +144,9 @@ func (n *Node) Reconnecting() bool {
 
 // DB returns the raw sql.DB connection object
 func (n *Node) DB() (*sql.DB, error) {
+	if n == nil {
+		return nil, sql.ErrConnDone
+	}
 	n.mtx.RLock()
 	defer n.mtx.RUnlock()
 
