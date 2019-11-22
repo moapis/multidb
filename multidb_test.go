@@ -286,3 +286,44 @@ func TestMultiDB_Node(t *testing.T) {
 		})
 	}
 }
+
+func TestMultiDB_All(t *testing.T) {
+	singleMDB, err := testSingleConf.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	multiMDB, err := testMultiConf.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name string
+		mdb  *MultiDB
+		want []*Node
+	}{
+		{
+			"No nodes",
+			&MultiDB{},
+			nil,
+		},
+		{
+			"Single node",
+			singleMDB,
+			singleMDB.all,
+		},
+		{
+			"Multi node",
+			multiMDB,
+			multiMDB.all,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mdb := tt.mdb
+			if got := mdb.All(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("MultiDB.All() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

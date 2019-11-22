@@ -119,3 +119,11 @@ func (mdb *MultiDB) Node() (*Node, error) {
 	}
 	return node, nil
 }
+
+// All returns all Nodes, regardless of their state.
+func (mdb *MultiDB) All() []*Node {
+	mdb.mtx.RLock()
+	defer mdb.mtx.RUnlock()
+
+	return mdb.all
+}
