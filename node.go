@@ -92,6 +92,8 @@ func (n *Node) Open() error {
 	}
 
 	n.db, n.connErr = sql.Open(n.driverName, n.dataSourceName)
+	n.reset()
+
 	return n.connErr
 }
 
