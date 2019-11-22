@@ -365,7 +365,7 @@ func TestNode_checkFailed(t *testing.T) {
 	}
 }
 
-func TestNode_checkErr(t *testing.T) {
+func TestNode_CheckErr(t *testing.T) {
 	n := newNode("sqlite3", "file::memory:?cache=shared", 10, 10, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(n)
@@ -377,40 +377,40 @@ func TestNode_checkErr(t *testing.T) {
 		sql.ErrTxDone,
 	}
 	for _, w := range whiteErrs {
-		err := n.checkErr(w)
+		err := n.CheckErr(w)
 		time.Sleep(time.Millisecond)
 		if err != w {
-			t.Errorf("Node.checkErr() Err = %v, want %v", err, w)
+			t.Errorf("Node.CheckErr() Err = %v, want %v", err, w)
 		}
 		if n.connErr != nil {
-			t.Errorf("Node.checkErr() connErr = %v, want %v", n.connErr, nil)
+			t.Errorf("Node.CheckErr() connErr = %v, want %v", n.connErr, nil)
 		}
 		if n.db == nil {
-			t.Errorf("Node.checkErr() DB = %v, want %v", n.db, "DB")
+			t.Errorf("Node.CheckErr() DB = %v, want %v", n.db, "DB")
 		}
 	}
-	err := n.checkErr(sql.ErrConnDone)
+	err := n.CheckErr(sql.ErrConnDone)
 	time.Sleep(time.Millisecond)
 	if err != sql.ErrConnDone {
-		t.Errorf("Node.checkErr() Err = %v, want %v", err, sql.ErrConnDone)
+		t.Errorf("Node.CheckErr() Err = %v, want %v", err, sql.ErrConnDone)
 	}
 	if n.connErr != sql.ErrConnDone {
-		t.Errorf("Node.checkErr() connErr = %v, want %v", n.connErr, sql.ErrConnDone)
+		t.Errorf("Node.CheckErr() connErr = %v, want %v", n.connErr, sql.ErrConnDone)
 	}
 	if n.db == nil {
-		t.Errorf("Node.checkErr() DB = %v, want %v", n.db, "DB")
+		t.Errorf("Node.CheckErr() DB = %v, want %v", n.db, "DB")
 	}
 
-	err = n.checkErr(sql.ErrConnDone)
+	err = n.CheckErr(sql.ErrConnDone)
 	time.Sleep(time.Millisecond)
 	if err != sql.ErrConnDone {
-		t.Errorf("Node.checkErr() Err = %v, want %v", err, sql.ErrConnDone)
+		t.Errorf("Node.CheckErr() Err = %v, want %v", err, sql.ErrConnDone)
 	}
 	if n.connErr != sql.ErrConnDone {
-		t.Errorf("Node.checkErr() connErr = %v, want %v", n.connErr, sql.ErrConnDone)
+		t.Errorf("Node.CheckErr() connErr = %v, want %v", n.connErr, sql.ErrConnDone)
 	}
 	if n.db != nil {
-		t.Errorf("Node.checkErr() DB = %v, want %v", n.db, nil)
+		t.Errorf("Node.CheckErr() DB = %v, want %v", n.db, nil)
 	}
 }
 

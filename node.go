@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/volatiletech/sqlboiler/boil"
 	"sync"
 	"time"
 )
@@ -166,8 +167,14 @@ func (n *Node) checkFailed(state bool) {
 	}
 }
 
-// checkErr tries to figure if the error is connection related (TODO)
-func (n *Node) checkErr(err error) error {
+// CheckErr updates the statistcs. If the error is nil or whitelisted, success is recorded.
+// Any other case constitutes an error and failure is recorded.
+// If a the configured failure trashhold is reached, this node will we disconnected.
+//
+// This method is already called by each database call method and need to be used in most cases.
+// It is exported for use in extenting libraries which need use struct embedding
+// and want to overload Node methods, while still keeping statistics up-to-date.
+func (n *Node) CheckErr(err error) error {
 	switch {
 	case err == nil:
 		go n.checkFailed(false)
@@ -190,7 +197,7 @@ func (n *Node) Exec(query string, args ...interface{}) (sql.Result, error) {
 		return nil, err
 	}
 	res, err := db.Exec(query, args...)
-	return res, n.checkErr(err)
+	return res, n.CheckErr(err)
 }
 
 // Query wrapper around sql.DB.Query.
@@ -201,7 +208,7 @@ func (n *Node) Query(query string, args ...interface{}) (*sql.Rows, error) {
 		return nil, err
 	}
 	rows, err := db.Query(query, args...)
-	return rows, n.checkErr(err)
+	return rows, n.CheckErr(err)
 }
 
 // QueryRow wrapper around sql.DB.QueryRow.
@@ -223,7 +230,7 @@ func (n *Node) ExecContext(ctx context.Context, query string, args ...interface{
 		return nil, err
 	}
 	res, err := db.ExecContext(ctx, query, args...)
-	return res, n.checkErr(err)
+	return res, n.CheckErr(err)
 }
 
 // QueryContext wrapper around sql.DB.Query.
@@ -234,7 +241,7 @@ func (n *Node) QueryContext(ctx context.Context, query string, args ...interface
 		return nil, err
 	}
 	rows, err := db.QueryContext(ctx, query, args...)
-	return rows, n.checkErr(err)
+	return rows, n.CheckErr(err)
 }
 
 // QueryRowContext wrapper around sql.DB.QueryRow.
@@ -251,23 +258,23 @@ func (n *Node) QueryRowContext(ctx context.Context, query string, args ...interf
 // Begin wrapper around sql.DB.Begin.
 // Implements boil.Beginner
 // Subsequent errors inside the transaction cannot be monitored by this package
-func (n *Node) Begin() (*sql.Tx, error) {
+func (n *Node) Begin() (boil.Transactor, error) {
 	db, err := n.DB()
 	if err != nil {
 		return nil, err
 	}
 	tx, err := db.Begin()
-	return tx, n.checkErr(err)
+	return tx, n.CheckErr(err)
 }
 
 // BeginTx wrapper around sql.DB.BeginTx.
 // Implements boil.ContextBeginner
 // Subsequent errors inside the transaction cannot be monitored by this package
-func (n *Node) BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error) {
+func (n *Node) BeginTx(ctx context.Context, opts *sql.TxOptions) (boil.Transactor, error) {
 	db, err := n.DB()
 	if err != nil {
 		return nil, err
 	}
 	tx, err := db.BeginTx(ctx, opts)
-	return tx, n.checkErr(err)
+	return tx, n.CheckErr(err)
 }
