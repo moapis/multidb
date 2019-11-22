@@ -48,6 +48,10 @@ type MultiDB struct {
 // Open all the configured DB hosts.
 // Poll Node.ConnErr() to inspect for connection failures.
 // Only returns an error if amount of configured nodes == 0.
+//
+// If ReconnectWait is set,
+// failing Nodes will enter into a reconnection sequence
+// and may become available after some time.
 func (c Config) Open() (*MultiDB, error) {
 	driverName := c.DBConf.DriverName()
 	dataSourceNames := c.DBConf.DataSourceNames()
@@ -89,10 +93,10 @@ func (mdb *MultiDB) Master(ctx context.Context) (*Node, error) {
 	master := mdb.master
 	mdb.mtx.RUnlock()
 
-	if db, _ := master.DB(); db != nil {
-		return master, nil
+	if _, err := master.DB(); err != nil {
+		return mdb.setMaster(ctx)
 	}
-	return mdb.setMaster(ctx)
+	return master, nil
 }
 
 // Node returns any Ready node with the lowest usage counter
