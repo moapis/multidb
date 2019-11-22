@@ -147,25 +147,25 @@ func (n *Node) Reconnecting() bool {
 }
 
 // DB returns the raw sql.DB connection object
-func (n *Node) DB() (*sql.DB, error) {
+func (n *Node) DB() *sql.DB {
 	if n == nil {
-		return nil, sql.ErrConnDone
+		return nil
 	}
 	n.mtx.RLock()
 	defer n.mtx.RUnlock()
 
 	if n.db == nil {
-		return nil, sql.ErrConnDone
+		return nil
 	}
 
-	return n.db, nil
+	return n.db
 }
 
 // InUse get the InUse counter from db.Stats.
 // Returns -1 in case db is unavailable.
 func (n *Node) InUse() int {
-	db, err := n.DB()
-	if err != nil {
+	db := n.DB()
+	if db == nil {
 		return -1
 	}
 	return db.Stats().InUse
@@ -219,22 +219,14 @@ func (n *Node) CheckErr(err error) error {
 // Exec wrapper around sql.DB.Exec.
 // Implements boil.Executor
 func (n *Node) Exec(query string, args ...interface{}) (sql.Result, error) {
-	db, err := n.DB()
-	if err != nil {
-		return nil, err
-	}
-	res, err := db.Exec(query, args...)
+	res, err := n.DB().Exec(query, args...)
 	return res, n.CheckErr(err)
 }
 
 // Query wrapper around sql.DB.Query.
 // Implements boil.Executor
 func (n *Node) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	db, err := n.DB()
-	if err != nil {
-		return nil, err
-	}
-	rows, err := db.Query(query, args...)
+	rows, err := n.DB().Query(query, args...)
 	return rows, n.CheckErr(err)
 }
 
@@ -242,32 +234,20 @@ func (n *Node) Query(query string, args ...interface{}) (*sql.Rows, error) {
 // Implements boil.Executor
 // Since errors are defered untill row.Scan, this package cannot monitor such errors.
 func (n *Node) QueryRow(query string, args ...interface{}) *sql.Row {
-	db, err := n.DB()
-	if err != nil {
-		return nil
-	}
-	return db.QueryRow(query, args...)
+	return n.DB().QueryRow(query, args...)
 }
 
 // ExecContext wrapper around sql.DB.Exec.
 // Implements boil.ContextExecutor
 func (n *Node) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	db, err := n.DB()
-	if err != nil {
-		return nil, err
-	}
-	res, err := db.ExecContext(ctx, query, args...)
+	res, err := n.DB().ExecContext(ctx, query, args...)
 	return res, n.CheckErr(err)
 }
 
 // QueryContext wrapper around sql.DB.Query.
 // Implements boil.ContextExecutor
 func (n *Node) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	db, err := n.DB()
-	if err != nil {
-		return nil, err
-	}
-	rows, err := db.QueryContext(ctx, query, args...)
+	rows, err := n.DB().QueryContext(ctx, query, args...)
 	return rows, n.CheckErr(err)
 }
 
@@ -275,22 +255,14 @@ func (n *Node) QueryContext(ctx context.Context, query string, args ...interface
 // Implements boil.ContextExecutor
 // Since errors are defered untill row.Scan, this package cannot monitor such errors.
 func (n *Node) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	db, err := n.DB()
-	if err != nil {
-		return nil
-	}
-	return db.QueryRowContext(ctx, query, args...)
+	return n.DB().QueryRowContext(ctx, query, args...)
 }
 
 // Begin wrapper around sql.DB.Begin.
 // Implements boil.Beginner
 // Subsequent errors inside the transaction cannot be monitored by this package
 func (n *Node) Begin() (boil.Transactor, error) {
-	db, err := n.DB()
-	if err != nil {
-		return nil, err
-	}
-	tx, err := db.Begin()
+	tx, err := n.DB().Begin()
 	return tx, n.CheckErr(err)
 }
 
@@ -298,10 +270,6 @@ func (n *Node) Begin() (boil.Transactor, error) {
 // Implements boil.ContextBeginner
 // Subsequent errors inside the transaction cannot be monitored by this package
 func (n *Node) BeginTx(ctx context.Context, opts *sql.TxOptions) (boil.Transactor, error) {
-	db, err := n.DB()
-	if err != nil {
-		return nil, err
-	}
-	tx, err := db.BeginTx(ctx, opts)
+	tx, err := n.DB().BeginTx(ctx, opts)
 	return tx, n.CheckErr(err)
 }

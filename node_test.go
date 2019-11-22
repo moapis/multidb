@@ -360,27 +360,24 @@ func TestNode_Reconnecting(t *testing.T) {
 func TestNode_DB(t *testing.T) {
 	// n.DB() should catch a <nil> node an prevent panic
 	var n *Node
-	db, err := n.DB()
-	if err == nil {
-		t.Errorf("Node.DB() Err = %v, want %v", err, sql.ErrConnDone)
+	db := n.DB()
+	if db != nil {
+		t.Errorf("Node.DB() DB = %v, want %v", db, nil)
 	}
 
 	n = newNode(testDBDriver, testDSN, 1000, 22, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
-	db, err = n.DB()
-	if err != nil {
-		t.Error(err)
-	}
+	db = n.DB()
 	if db == nil {
-		t.Errorf("Node.DB() DB = %v, want DB", db)
+		t.Errorf("Node.DB() DB = %v, want %v", db, "DB")
 	}
 
 	n.Close()
-	db, err = n.DB()
-	if err == nil {
-		t.Errorf("Node.DB() Err = %v, want %v", err, sql.ErrConnDone)
+	db = n.DB()
+	if db != nil {
+		t.Errorf("Node.DB() DB = %v, want %v", db, nil)
 	}
 }
 
@@ -491,13 +488,6 @@ func TestNode_Exec(t *testing.T) {
 	if r == nil {
 		t.Errorf("Node.Exec() R = %v, want %v", r, "Result")
 	}
-	if err := n.Close(); err != nil {
-		t.Fatal(err)
-	}
-	r, err = n.Exec("select $1;", 1)
-	if err != sql.ErrConnDone {
-		t.Errorf("Node.Exec() connErr = %v, want %v", err, sql.ErrConnDone)
-	}
 }
 
 func TestNode_Query(t *testing.T) {
@@ -512,13 +502,6 @@ func TestNode_Query(t *testing.T) {
 	if r == nil {
 		t.Errorf("Node.Query() R = %v, want %v", r, "Result")
 	}
-	if err := n.Close(); err != nil {
-		t.Fatal(err)
-	}
-	r, err = n.Query("select $1;", 1)
-	if err != sql.ErrConnDone {
-		t.Errorf("Node.Query() connErr = %v, want %v", err, sql.ErrConnDone)
-	}
 }
 
 func TestNode_QueryRow(t *testing.T) {
@@ -529,13 +512,6 @@ func TestNode_QueryRow(t *testing.T) {
 	r := n.QueryRow("select $1;", 1)
 	if r == nil {
 		t.Errorf("Node.QueryRow() R = %v, want %v", r, "Result")
-	}
-	if err := n.Close(); err != nil {
-		t.Fatal(err)
-	}
-	r = n.QueryRow("select $1;", 1)
-	if r != nil {
-		t.Errorf("Node.QueryRow() R = %v, want %v", r, nil)
 	}
 }
 
@@ -551,13 +527,6 @@ func TestNode_ExecContext(t *testing.T) {
 	if r == nil {
 		t.Errorf("Node.ExecContext() R = %v, want %v", r, "Result")
 	}
-	if err := n.Close(); err != nil {
-		t.Fatal(err)
-	}
-	r, err = n.ExecContext(context.Background(), "select $1;", 1)
-	if err != sql.ErrConnDone {
-		t.Errorf("Node.ExecContext() connErr = %v, want %v", err, sql.ErrConnDone)
-	}
 }
 
 func TestNode_QueryContext(t *testing.T) {
@@ -572,13 +541,6 @@ func TestNode_QueryContext(t *testing.T) {
 	if r == nil {
 		t.Errorf("Node.QueryContext() R = %v, want %v", r, "Result")
 	}
-	if err := n.Close(); err != nil {
-		t.Fatal(err)
-	}
-	r, err = n.QueryContext(context.Background(), "select $1;", 1)
-	if err != sql.ErrConnDone {
-		t.Errorf("Node.QueryContext() connErr = %v, want %v", err, sql.ErrConnDone)
-	}
 }
 
 func TestNode_QueryRowContext(t *testing.T) {
@@ -589,13 +551,6 @@ func TestNode_QueryRowContext(t *testing.T) {
 	r := n.QueryRowContext(context.Background(), "select $1;", 1)
 	if r == nil {
 		t.Errorf("Node.QueryRowContext() R = %v, want %v", r, "Result")
-	}
-	if err := n.Close(); err != nil {
-		t.Fatal(err)
-	}
-	r = n.QueryRowContext(context.Background(), "select $1;", 1)
-	if r != nil {
-		t.Errorf("Node.QueryRowContext() R = %v, want %v", r, nil)
 	}
 }
 
@@ -614,13 +569,6 @@ func TestNode_Begin(t *testing.T) {
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
 	}
-	if err := n.Close(); err != nil {
-		t.Fatal(err)
-	}
-	tx, err = n.Begin()
-	if err != sql.ErrConnDone {
-		t.Errorf("Node.Begin() connErr = %v, want %v", err, sql.ErrConnDone)
-	}
 }
 
 func TestNode_BeginTx(t *testing.T) {
@@ -637,12 +585,5 @@ func TestNode_BeginTx(t *testing.T) {
 	}
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
-	}
-	if err := n.Close(); err != nil {
-		t.Fatal(err)
-	}
-	tx, err = n.BeginTx(context.Background(), nil)
-	if err != sql.ErrConnDone {
-		t.Errorf("Node.BeginTx() connErr = %v, want %v", err, sql.ErrConnDone)
 	}
 }

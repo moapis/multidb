@@ -97,7 +97,7 @@ func (mdb *MultiDB) Master(ctx context.Context) (*Node, error) {
 	master := mdb.master
 	mdb.mtx.RUnlock()
 
-	if _, err := master.DB(); err != nil {
+	if db := master.DB(); db == nil {
 		return mdb.setMaster(ctx)
 	}
 	return master, nil
