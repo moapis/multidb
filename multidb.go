@@ -38,8 +38,8 @@ type Config struct {
 	ReconnectWait time.Duration
 }
 
-// MDB holds the multiple DB objects, capable of Writing and Reading.
-type MDB struct {
+// MultiDB holds the multiple DB objects, capable of Writing and Reading.
+type MultiDB struct {
 	master *Node
 	all    []*Node
 	mtx    sync.RWMutex // Protection for reconfiguration
@@ -48,7 +48,7 @@ type MDB struct {
 // Open all the configured DB hosts.
 // Poll Node.ConnErr() to inspect for connection failures.
 // Only returns an error if amount of configured nodes == 0.
-func (c Config) Open() (*MDB, error) {
+func (c Config) Open() (*MultiDB, error) {
 	driverName := c.DBConf.DriverName()
 	dataSourceNames := c.DBConf.DataSourceNames()
 
@@ -56,7 +56,7 @@ func (c Config) Open() (*MDB, error) {
 		return nil, errors.New(ErrNoNodes)
 	}
 
-	mdb := new(MDB)
+	mdb := new(MultiDB)
 	mdb.all = make([]*Node, len(dataSourceNames))
 
 	for i, dsn := range dataSourceNames {
@@ -68,7 +68,7 @@ func (c Config) Open() (*MDB, error) {
 	return mdb, nil
 }
 
-func (mdb *MDB) setMaster(ctx context.Context) (*Node, error) {
+func (mdb *MultiDB) setMaster(ctx context.Context) (*Node, error) {
 	mdb.mtx.Lock()
 	defer mdb.mtx.Unlock()
 
@@ -84,7 +84,7 @@ func (mdb *MDB) setMaster(ctx context.Context) (*Node, error) {
 }
 
 // Master node getter
-func (mdb *MDB) Master(ctx context.Context) (*Node, error) {
+func (mdb *MultiDB) Master(ctx context.Context) (*Node, error) {
 	mdb.mtx.RLock()
 	master := mdb.master
 	mdb.mtx.RUnlock()
@@ -98,7 +98,7 @@ func (mdb *MDB) Master(ctx context.Context) (*Node, error) {
 // Node returns any Ready node with the lowest usage counter
 // The returned node may be master or slave and should
 // only be used for read operations.
-func (mdb *MDB) Node() (*Node, error) {
+func (mdb *MultiDB) Node() (*Node, error) {
 	mdb.mtx.RLock()
 	defer mdb.mtx.RUnlock()
 
