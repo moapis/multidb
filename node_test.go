@@ -17,8 +17,6 @@ import (
 var (
 	_ = boil.Executor(&Node{})
 	_ = boil.ContextExecutor(&Node{})
-	_ = boil.Beginner(&Node{})
-	_ = boil.ContextBeginner(&Node{})
 )
 
 func Test_newNodeStats(t *testing.T) {
