@@ -241,6 +241,51 @@ func TestMultiDB_Master(t *testing.T) {
 	}
 }
 
+func TestMultiDB_MasterTx(t *testing.T) {
+	singleMDB, err := testSingleConf.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name    string
+		mdb     *MultiDB
+		ctx     context.Context
+		wantErr bool
+	}{
+		{
+			"No nodes",
+			&MultiDB{},
+			context.Background(),
+			true,
+		},
+		{
+			"Single node",
+			singleMDB,
+			context.Background(),
+			false,
+		},
+		{
+			"Subsequent single node",
+			singleMDB,
+			context.Background(),
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mdb := tt.mdb
+			got, err := mdb.MasterTx(tt.ctx, nil)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("MultiDB.Master() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && got == nil {
+				t.Errorf("MultiDB.Master() = %v, want %v", got, "Tx")
+			}
+		})
+	}
+}
+
 func TestMultiDB_Node(t *testing.T) {
 	singleMDB, err := testSingleConf.Open()
 	if err != nil {
@@ -286,6 +331,56 @@ func TestMultiDB_Node(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("MultiDB.Node() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMultiDB_NodeTx(t *testing.T) {
+	singleMDB, err := testSingleConf.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	multiMDB, err := testMultiConf.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name    string
+		mdb     *MultiDB
+		ctx     context.Context
+		wantErr bool
+	}{
+		{
+			"No nodes",
+			&MultiDB{},
+			context.Background(),
+			true,
+		},
+		{
+			"Single node",
+			singleMDB,
+			context.Background(),
+			false,
+		},
+		{
+			"Multi node",
+			multiMDB,
+			context.Background(),
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mdb := tt.mdb
+			got, err := mdb.NodeTx(tt.ctx, nil)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("MultiDB.Node() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && got == nil {
+				t.Errorf("MultiDB.Master() = %v, want %v", got, "Tx")
 			}
 		})
 	}

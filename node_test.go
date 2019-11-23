@@ -22,10 +22,10 @@ const (
 )
 
 // Interface implementation checks
-var (
-	_ = boil.Executor(&Node{})
-	_ = boil.ContextExecutor(&Node{})
-)
+func _() boil.Executor          { return &Node{} }
+func _() boil.ContextExecutor   { return &Node{} }
+func _() boil.Transactor        { return &Tx{} }
+func _() boil.ContextTransactor { return &Tx{} }
 
 func Test_newNodeStats(t *testing.T) {
 	type args struct {
@@ -118,6 +118,13 @@ func Test_nodeStats_failed(t *testing.T) {
 			[]bool{true, false, false, false, false},
 		},
 	}
+	// Run with 0 conf, to check for panic
+	s := newNodeStats(0, 0)
+	got := s.failed(true)
+	if got != false {
+		t.Errorf("nodeStats.failed() = %v, want %v", got, false)
+	}
+
 	for n, c := range confs {
 		s := newNodeStats(4, c)
 		for _, tt := range tests {
@@ -566,9 +573,6 @@ func TestNode_Begin(t *testing.T) {
 	if tx == nil {
 		t.Errorf("Node.Begin() R = %v, want %v", tx, "TX")
 	}
-	if err := tx.Rollback(); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func TestNode_BeginTx(t *testing.T) {
@@ -582,8 +586,5 @@ func TestNode_BeginTx(t *testing.T) {
 	}
 	if tx == nil {
 		t.Errorf("Node.BeginTx() R = %v, want %v", tx, "TX")
-	}
-	if err := tx.Rollback(); err != nil {
-		t.Fatal(err)
 	}
 }

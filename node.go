@@ -8,7 +8,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/volatiletech/sqlboiler/boil"
 	"sync"
 	"time"
 )
@@ -45,7 +44,7 @@ func (s *nodeStats) reset() {
 
 // failed counts a failure and calculates if the node is failed
 func (s *nodeStats) failed(state bool) bool {
-	if s.failPercent < 0 {
+	if s.failPercent < 0 || len(s.fails) == 0 {
 		return false
 	}
 
@@ -258,18 +257,16 @@ func (n *Node) QueryRowContext(ctx context.Context, query string, args ...interf
 	return n.DB().QueryRowContext(ctx, query, args...)
 }
 
-// Begin wrapper around sql.DB.Begin.
-// Implements boil.Beginner
-// Subsequent errors inside the transaction cannot be monitored by this package
-func (n *Node) Begin() (boil.Transactor, error) {
+// Begin opens a new *sql.Tx inside a Tx.
+// Does NOT implement boil.Beginner, as it requires a *sql.Tx.
+func (n *Node) Begin() (*Tx, error) {
 	tx, err := n.DB().Begin()
-	return tx, n.CheckErr(err)
+	return &Tx{n, tx}, n.CheckErr(err)
 }
 
-// BeginTx wrapper around sql.DB.BeginTx.
-// Implements boil.ContextBeginner
-// Subsequent errors inside the transaction cannot be monitored by this package
-func (n *Node) BeginTx(ctx context.Context, opts *sql.TxOptions) (boil.Transactor, error) {
+// BeginTx opens a new *sql.Tx inside a Tx.
+// Does NOT implement boil.Beginner, as it requires a *sql.Tx.
+func (n *Node) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 	tx, err := n.DB().BeginTx(ctx, opts)
-	return tx, n.CheckErr(err)
+	return &Tx{n, tx}, n.CheckErr(err)
 }

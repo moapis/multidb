@@ -6,6 +6,7 @@ package multidb
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"sync"
 	"time"
@@ -103,6 +104,15 @@ func (mdb *MultiDB) Master(ctx context.Context) (*Node, error) {
 	return master, nil
 }
 
+// MasterTx returns the master node with an opened transaction
+func (mdb *MultiDB) MasterTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
+	master, err := mdb.Master(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return master.BeginTx(ctx, opts)
+}
+
 // Node returns any Ready node with the lowest usage counter
 // The returned node may be master or slave and should
 // only be used for read operations.
@@ -122,6 +132,15 @@ func (mdb *MultiDB) Node() (*Node, error) {
 		return nil, errors.New(ErrNoNodes)
 	}
 	return node, nil
+}
+
+// NodeTx returns any node with an opened transaction
+func (mdb *MultiDB) NodeTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
+	node, err := mdb.Node()
+	if err != nil {
+		return nil, err
+	}
+	return node.BeginTx(ctx, opts)
 }
 
 // All returns all Nodes, regardless of their state.
