@@ -273,6 +273,9 @@ func TestMultiDB_MasterTx(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if !tt.wantErr {
+				mock.ExpectBegin()
+			}
 			mdb := tt.mdb
 			got, err := mdb.MasterTx(tt.ctx, nil)
 			if (err != nil) != tt.wantErr {
@@ -373,6 +376,9 @@ func TestMultiDB_NodeTx(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if !tt.wantErr {
+				mock.ExpectBegin()
+			}
 			mdb := tt.mdb
 			got, err := mdb.NodeTx(tt.ctx, nil)
 			if (err != nil) != tt.wantErr {

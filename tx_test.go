@@ -3,6 +3,8 @@ package multidb
 import (
 	"context"
 	"testing"
+
+	sm "github.com/DATA-DOG/go-sqlmock"
 )
 
 func beginTestTx() (*Tx, error) {
@@ -10,6 +12,7 @@ func beginTestTx() (*Tx, error) {
 	if err := n.Open(); err != nil {
 		return nil, err
 	}
+	mock.ExpectBegin()
 	return n.Begin()
 }
 
@@ -18,6 +21,7 @@ func TestTx_Rollback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	mock.ExpectRollback()
 	if err := tx.Rollback(); err != nil {
 		t.Error(err)
 	}
@@ -28,6 +32,7 @@ func TestTx_Commit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	mock.ExpectCommit()
 	if err := tx.Commit(); err != nil {
 		t.Error(err)
 	}
@@ -38,12 +43,15 @@ func TestTx_Exec(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := tx.Exec("select $1;", 1)
+	mock.ExpectExec(testQuery).WithArgs(1).WillReturnResult(sm.NewResult(1, 1))
+
+	got, err := tx.Exec(testQuery, 1)
 	if err != nil {
 		t.Error(err)
 	}
-	if r == nil {
-		t.Errorf("Node.Query() R = %v, want %v", r, "Result")
+	i, err := got.RowsAffected()
+	if err != nil || i != 1 {
+		t.Errorf("Node.Exec() Res = %v, want %v", i, 1)
 	}
 }
 
@@ -52,12 +60,21 @@ func TestTx_Query(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := tx.Query("select $1;", 1)
+
+	want := "value"
+	mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
+
+	r, err := tx.Query(testQuery, 1)
 	if err != nil {
 		t.Error(err)
 	}
-	if r == nil {
-		t.Errorf("Node.Query() R = %v, want %v", r, "Result")
+	r.Next()
+	var got string
+	if err = r.Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("Node.Query() R = %v, want %v", got, want)
 	}
 }
 
@@ -66,9 +83,17 @@ func TestTx_QueryRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := tx.QueryRow("select $1;", 1)
-	if r == nil {
-		t.Errorf("Node.QueryRow() R = %v, want %v", r, "Result")
+
+	want := "value"
+	mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
+
+	r := tx.QueryRow(testQuery, 1)
+	var got string
+	if err := r.Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("Node.QueryRow() R = %v, want %v", got, want)
 	}
 }
 
@@ -77,12 +102,16 @@ func TestTx_ExecContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := tx.ExecContext(context.Background(), "select $1;", 1)
+
+	mock.ExpectExec(testQuery).WithArgs(1).WillReturnResult(sm.NewResult(1, 1))
+
+	got, err := tx.ExecContext(context.Background(), testQuery, 1)
 	if err != nil {
 		t.Error(err)
 	}
-	if r == nil {
-		t.Errorf("Node.ExecContext() R = %v, want %v", r, "Result")
+	i, err := got.RowsAffected()
+	if err != nil || i != 1 {
+		t.Errorf("Node.Exec() Res = %v, want %v", i, 1)
 	}
 }
 
@@ -91,12 +120,21 @@ func TestTx_QueryContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := tx.QueryContext(context.Background(), "select $1;", 1)
+
+	want := "value"
+	mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
+
+	r, err := tx.QueryContext(context.Background(), testQuery, 1)
 	if err != nil {
 		t.Error(err)
 	}
-	if r == nil {
-		t.Errorf("Node.QueryContext() R = %v, want %v", r, "Result")
+	r.Next()
+	var got string
+	if err = r.Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("Node.Query() R = %v, want %v", got, want)
 	}
 }
 
@@ -105,8 +143,16 @@ func TestTx_QueryRowContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := tx.QueryRowContext(context.Background(), "select $1;", 1)
-	if r == nil {
-		t.Errorf("Node.QueryRowContext() R = %v, want %v", r, "Result")
+
+	want := "value"
+	mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
+
+	r := tx.QueryRowContext(context.Background(), testQuery, 1)
+	var got string
+	if err := r.Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("Node.QueryRow() R = %v, want %v", got, want)
 	}
 }

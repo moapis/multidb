@@ -8,17 +8,20 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
+	"os"
 	"reflect"
 	"testing"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	sm "github.com/DATA-DOG/go-sqlmock"
 	"github.com/volatiletech/sqlboiler/boil"
 )
 
 const (
-	testDBDriver = "sqlite3"
+	testDBDriver = "sqlmock"
 	testDSN      = "file::memory:"
+	testQuery    = "select;"
 )
 
 // Interface implementation checks
@@ -26,6 +29,18 @@ func _() boil.Executor          { return &Node{} }
 func _() boil.ContextExecutor   { return &Node{} }
 func _() boil.Transactor        { return &Tx{} }
 func _() boil.ContextTransactor { return &Tx{} }
+
+var (
+	mock sm.Sqlmock
+)
+
+func TestMain(m *testing.M) {
+	var err error
+	if _, mock, err = sm.NewWithDSN(testDSN); err != nil {
+		log.Fatal(err)
+	}
+	os.Exit(m.Run())
+}
 
 func Test_newNodeStats(t *testing.T) {
 	type args struct {
@@ -488,12 +503,16 @@ func TestNode_Exec(t *testing.T) {
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
-	r, err := n.Exec("select $1;", 1)
+
+	mock.ExpectExec(testQuery).WithArgs(1).WillReturnResult(sm.NewResult(1, 1))
+
+	got, err := n.Exec(testQuery, 1)
 	if err != nil {
 		t.Error(err)
 	}
-	if r == nil {
-		t.Errorf("Node.Exec() R = %v, want %v", r, "Result")
+	i, err := got.RowsAffected()
+	if err != nil || i != 1 {
+		t.Errorf("Node.Exec() Res = %v, want %v", i, 1)
 	}
 }
 
@@ -502,12 +521,21 @@ func TestNode_Query(t *testing.T) {
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
-	r, err := n.Query("select $1;", 1)
+
+	want := "value"
+	mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
+
+	r, err := n.Query(testQuery, 1)
 	if err != nil {
 		t.Error(err)
 	}
-	if r == nil {
-		t.Errorf("Node.Query() R = %v, want %v", r, "Result")
+	r.Next()
+	var got string
+	if err = r.Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("Node.Query() R = %v, want %v", got, want)
 	}
 }
 
@@ -516,9 +544,17 @@ func TestNode_QueryRow(t *testing.T) {
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
-	r := n.QueryRow("select $1;", 1)
-	if r == nil {
-		t.Errorf("Node.QueryRow() R = %v, want %v", r, "Result")
+
+	want := "value"
+	mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
+
+	r := n.QueryRow(testQuery, 1)
+	var got string
+	if err := r.Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("Node.QueryRow() R = %v, want %v", got, want)
 	}
 }
 
@@ -527,12 +563,16 @@ func TestNode_ExecContext(t *testing.T) {
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
-	r, err := n.ExecContext(context.Background(), "select $1;", 1)
+
+	mock.ExpectExec(testQuery).WithArgs(1).WillReturnResult(sm.NewResult(1, 1))
+
+	got, err := n.ExecContext(context.Background(), testQuery, 1)
 	if err != nil {
 		t.Error(err)
 	}
-	if r == nil {
-		t.Errorf("Node.ExecContext() R = %v, want %v", r, "Result")
+	i, err := got.RowsAffected()
+	if err != nil || i != 1 {
+		t.Errorf("Node.Exec() Res = %v, want %v", i, 1)
 	}
 }
 
@@ -541,12 +581,21 @@ func TestNode_QueryContext(t *testing.T) {
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
-	r, err := n.QueryContext(context.Background(), "select $1;", 1)
+
+	want := "value"
+	mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
+
+	r, err := n.QueryContext(context.Background(), testQuery, 1)
 	if err != nil {
 		t.Error(err)
 	}
-	if r == nil {
-		t.Errorf("Node.QueryContext() R = %v, want %v", r, "Result")
+	r.Next()
+	var got string
+	if err = r.Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("Node.Query() R = %v, want %v", got, want)
 	}
 }
 
@@ -555,9 +604,17 @@ func TestNode_QueryRowContext(t *testing.T) {
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
-	r := n.QueryRowContext(context.Background(), "select $1;", 1)
-	if r == nil {
-		t.Errorf("Node.QueryRowContext() R = %v, want %v", r, "Result")
+
+	want := "value"
+	mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
+
+	r := n.QueryRowContext(context.Background(), testQuery, 1)
+	var got string
+	if err := r.Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("Node.QueryRow() R = %v, want %v", got, want)
 	}
 }
 
@@ -566,6 +623,9 @@ func TestNode_Begin(t *testing.T) {
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
+
+	mock.ExpectBegin()
+
 	tx, err := n.Begin()
 	if err != nil {
 		t.Error(err)
@@ -580,6 +640,9 @@ func TestNode_BeginTx(t *testing.T) {
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
+
+	mock.ExpectBegin()
+
 	tx, err := n.BeginTx(context.Background(), nil)
 	if err != nil {
 		t.Error(err)
