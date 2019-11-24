@@ -28,4 +28,12 @@ jobs:
         go get -v -t -d ./...
 
     - name: Build
-      run: go test
+      run: go test -coverprofile=coverage.txt -covermode=atomic ./...
+      
+    - name: Codecov
+      uses: codecov/codecov-action@v1.0.4
+      with:
+        # Repository upload token - get it from codecov.io
+        token: ${{ secrets.CODECOV_TOKEN }}
+        # Path to coverage file to upload
+        file: coverage.txt
