@@ -31,7 +31,8 @@ func _() boil.Transactor        { return &Tx{} }
 func _() boil.ContextTransactor { return &Tx{} }
 
 var (
-	mock sm.Sqlmock
+	mock      sm.Sqlmock
+	multiMock []sm.Sqlmock
 )
 
 func TestMain(m *testing.M) {
