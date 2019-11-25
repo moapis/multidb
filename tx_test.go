@@ -5,7 +5,14 @@ import (
 	"testing"
 
 	sm "github.com/DATA-DOG/go-sqlmock"
+	"github.com/volatiletech/sqlboiler/boil"
 )
+
+// Interface implementation checks
+func _() boil.Executor          { return &Tx{} }
+func _() boil.ContextExecutor   { return &Tx{} }
+func _() boil.Transactor        { return &Tx{} }
+func _() boil.ContextTransactor { return &Tx{} }
 
 func beginTestTx() (*Tx, error) {
 	n := newNode(testDBDriver, testDSN, 10, 0, 0)

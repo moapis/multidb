@@ -60,7 +60,14 @@ func nodes2Exec(nodes []*Node) (xs []executor) {
 	return xs
 }
 
-func exec(ctx context.Context, xs []executor, query string, args ...interface{}) (sql.Result, error) {
+func mtx2Exec(mtx []*Tx) (xs []executor) {
+	for _, tx := range mtx {
+		xs = append(xs, tx)
+	}
+	return xs
+}
+
+func multiExec(ctx context.Context, xs []executor, query string, args ...interface{}) (sql.Result, error) {
 	rc := make(chan sql.Result, len(xs))
 	ec := make(chan error, len(xs))
 	for _, x := range xs {
@@ -90,7 +97,7 @@ func exec(ctx context.Context, xs []executor, query string, args ...interface{})
 	return nil, me.check()
 }
 
-func query(ctx context.Context, xs []executor, query string, args ...interface{}) (*sql.Rows, error) {
+func multiQuery(ctx context.Context, xs []executor, query string, args ...interface{}) (*sql.Rows, error) {
 	rc := make(chan *sql.Rows, len(xs))
 	ec := make(chan error, len(xs))
 	for _, x := range xs {
@@ -120,7 +127,7 @@ func query(ctx context.Context, xs []executor, query string, args ...interface{}
 	return nil, me.check()
 }
 
-func queryRow(ctx context.Context, xs []executor, query string, args ...interface{}) *sql.Row {
+func multiQueryRow(ctx context.Context, xs []executor, query string, args ...interface{}) *sql.Row {
 	rc := make(chan *sql.Row, len(xs))
 	for _, x := range xs {
 		go func(x executor) {

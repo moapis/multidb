@@ -25,14 +25,11 @@ const (
 )
 
 // Interface implementation checks
-func _() boil.Executor          { return &Node{} }
-func _() boil.ContextExecutor   { return &Node{} }
-func _() boil.Transactor        { return &Tx{} }
-func _() boil.ContextTransactor { return &Tx{} }
+func _() boil.Executor        { return &Node{} }
+func _() boil.ContextExecutor { return &Node{} }
 
 var (
-	mock      sm.Sqlmock
-	multiMock []sm.Sqlmock
+	mock sm.Sqlmock
 )
 
 func TestMain(m *testing.M) {
