@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"reflect"
@@ -42,8 +43,8 @@ func TestMain(m *testing.M) {
 
 func Test_newNodeStats(t *testing.T) {
 	type args struct {
-		statsLen    int
-		failPercent int
+		statsLen int
+		maxFails int
 	}
 	tt := struct {
 		name string
@@ -52,17 +53,17 @@ func Test_newNodeStats(t *testing.T) {
 	}{
 		"newNodeStats",
 		args{
-			statsLen:    1000,
-			failPercent: 50,
+			statsLen: 1000,
+			maxFails: 50,
 		},
 		nodeStats{
-			failPercent: 50,
-			fails:       make([]bool, 1000),
+			maxFails: 50,
+			fails:    make([]bool, 1000),
 		},
 	}
 
 	t.Run(tt.name, func(t *testing.T) {
-		got := newNodeStats(tt.args.statsLen, tt.args.failPercent)
+		got := newNodeStats(tt.args.statsLen, tt.args.maxFails)
 		if !reflect.DeepEqual(&got, &tt.want) {
 			t.Errorf("newNodeStats() = %v, want %v", &got, &tt.want)
 		}
@@ -86,7 +87,7 @@ func Test_nodeStats_reset(t *testing.T) {
 }
 
 func Test_nodeStats_failed(t *testing.T) {
-	confs := []int{0, 50, 99, 100, -1}
+	confs := []int{0, 2, 3, 4, -1}
 	type args struct {
 		state bool
 	}
@@ -96,37 +97,37 @@ func Test_nodeStats_failed(t *testing.T) {
 		wants []bool
 	}{
 		{
-			"0%",
+			"0/4",
 			args{false},
 			[]bool{false, false, false, false, false},
 		},
 		{
-			"Up to 25%",
+			"Up to 1/4",
 			args{true},
 			[]bool{true, false, false, false, false},
 		},
 		{
-			"Up to 50%",
+			"Up to 2/4",
 			args{true},
 			[]bool{true, false, false, false, false},
 		},
 		{
-			"Up to 75%",
+			"Up to 3/4",
 			args{true},
 			[]bool{true, true, false, false, false},
 		},
 		{
-			"Up to 100% and wrap",
+			"Up to 4/4 and wrap",
 			args{true},
 			[]bool{true, true, true, false, false},
 		},
 		{
-			"Down to 75%",
+			"Down to 3/4",
 			args{false},
 			[]bool{true, true, false, false, false},
 		},
 		{
-			"Down to 50%",
+			"Down to 2/4",
 			args{false},
 			[]bool{true, false, false, false, false},
 		},
@@ -141,7 +142,7 @@ func Test_nodeStats_failed(t *testing.T) {
 	for n, c := range confs {
 		s := newNodeStats(4, c)
 		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
+			t.Run(fmt.Sprintf("%d: %v", c, tt.name), func(t *testing.T) {
 				got := s.failed(tt.args.state)
 				if got != tt.wants[n] {
 					t.Errorf("nodeStats.failed() = %v, want %v", got, tt.wants[n])
@@ -160,7 +161,7 @@ func Test_newNode(t *testing.T) {
 		driverName     string
 		dataSourceName string
 		statsLen       int
-		failPercent    int
+		maxFails       int
 		reconnectWait  time.Duration
 	}
 	tests := []struct {
@@ -174,13 +175,13 @@ func Test_newNode(t *testing.T) {
 				driverName:     testDBDriver,
 				dataSourceName: testDSN,
 				statsLen:       1000,
-				failPercent:    22,
+				maxFails:       22,
 				reconnectWait:  5 * time.Second,
 			},
 			&Node{
 				nodeStats: nodeStats{
-					failPercent: 22,
-					fails:       make([]bool, 1000),
+					maxFails: 22,
+					fails:    make([]bool, 1000),
 				},
 				driverName:     testDBDriver,
 				dataSourceName: testDSN,
@@ -190,7 +191,7 @@ func Test_newNode(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := newNode(tt.args.driverName, tt.args.dataSourceName, tt.args.statsLen, tt.args.failPercent, tt.args.reconnectWait); !reflect.DeepEqual(got, tt.want) {
+			if got := newNode(tt.args.driverName, tt.args.dataSourceName, tt.args.statsLen, tt.args.maxFails, tt.args.reconnectWait); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("newNode() = %v, want %v", got, tt.want)
 			}
 		})
@@ -200,7 +201,7 @@ func Test_newNode(t *testing.T) {
 func TestNode_Open(t *testing.T) {
 	type args struct {
 		driverName, dataSourceName string
-		statsLen, failPercent      int
+		statsLen, maxFails         int
 		reconnectWait              time.Duration
 	}
 	tests := []struct {
@@ -214,7 +215,7 @@ func TestNode_Open(t *testing.T) {
 				driverName:     testDBDriver,
 				dataSourceName: testDSN,
 				statsLen:       1000,
-				failPercent:    22,
+				maxFails:       22,
 				reconnectWait:  5 * time.Second,
 			},
 			false,
@@ -225,7 +226,7 @@ func TestNode_Open(t *testing.T) {
 				driverName:     testDBDriver,
 				dataSourceName: testDSN,
 				statsLen:       1000,
-				failPercent:    22,
+				maxFails:       22,
 				reconnectWait:  5 * time.Second,
 			},
 			true,
@@ -236,7 +237,7 @@ func TestNode_Open(t *testing.T) {
 				driverName:     "foo",
 				dataSourceName: "bar",
 				statsLen:       1000,
-				failPercent:    22,
+				maxFails:       22,
 				reconnectWait:  5 * time.Second,
 			},
 			true,
@@ -244,7 +245,7 @@ func TestNode_Open(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := newNode(tt.args.driverName, tt.args.dataSourceName, tt.args.statsLen, tt.args.failPercent, tt.args.reconnectWait)
+			n := newNode(tt.args.driverName, tt.args.dataSourceName, tt.args.statsLen, tt.args.maxFails, tt.args.reconnectWait)
 			if tt.name == ErrAlreadyOpen {
 				if err := n.Open(); err != nil {
 					t.Fatal(err)
@@ -432,7 +433,7 @@ func TestNode_Err(t *testing.T) {
 }
 
 func TestNode_checkFailed(t *testing.T) {
-	n := newNode(testDBDriver, testDSN, 10, 50, 0)
+	n := newNode(testDBDriver, testDSN, 10, 5, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(n)
 	}
@@ -448,7 +449,7 @@ func TestNode_checkFailed(t *testing.T) {
 }
 
 func TestNode_CheckErr(t *testing.T) {
-	n := newNode(testDBDriver, testDSN, 10, 10, 0)
+	n := newNode(testDBDriver, testDSN, 10, 1, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(n)
 	}

@@ -30,7 +30,7 @@ func TestConfig_Open(t *testing.T) {
 	type fields struct {
 		DBConf        drivers.Configurator
 		StatsLen      int
-		FailPrecent   int
+		MaxFails      int
 		ReconnectWait time.Duration
 	}
 	tests := []struct {
@@ -45,7 +45,7 @@ func TestConfig_Open(t *testing.T) {
 					dn: testDBDriver,
 				},
 				StatsLen:      100,
-				FailPrecent:   20,
+				MaxFails:      20,
 				ReconnectWait: 0,
 			},
 			true,
@@ -58,7 +58,7 @@ func TestConfig_Open(t *testing.T) {
 					dsns: []string{testDSN},
 				},
 				StatsLen:      100,
-				FailPrecent:   20,
+				MaxFails:      20,
 				ReconnectWait: 0,
 			},
 			false,
@@ -71,7 +71,7 @@ func TestConfig_Open(t *testing.T) {
 					dsns: []string{testDSN, testDSN, testDSN, testDSN},
 				},
 				StatsLen:      100,
-				FailPrecent:   20,
+				MaxFails:      20,
 				ReconnectWait: 0,
 			},
 			false,
@@ -84,7 +84,7 @@ func TestConfig_Open(t *testing.T) {
 					dsns: []string{testDSN, testDSN, testDSN, testDSN},
 				},
 				StatsLen:      100,
-				FailPrecent:   20,
+				MaxFails:      20,
 				ReconnectWait: time.Minute,
 			},
 			false,
@@ -95,7 +95,7 @@ func TestConfig_Open(t *testing.T) {
 			c := Config{
 				DBConf:        tt.fields.DBConf,
 				StatsLen:      tt.fields.StatsLen,
-				FailPrecent:   tt.fields.FailPrecent,
+				MaxFails:      tt.fields.MaxFails,
 				ReconnectWait: tt.fields.ReconnectWait,
 			}
 			got, err := c.Open()

@@ -27,16 +27,16 @@ const (
 type Config struct {
 	DBConf drivers.Configurator
 
-	// Amount of past connections to consider when establishing the failure rate
+	// Amount of past connections to consider when establishing the failure rate.
 	StatsLen int
-	// Allowed percentage of failure before the Node is closed and removed.
+	// Amount of allowed counted failures, after which the DB connector will be closed.
 	// Note that Go's SQL connectors are actually connection pools.
-	// Pool connections are already reset upon connection errors by the sql library.
-	// This library closes the complete pool.
+	// Individual connections are already reset upon connection errors by the sql library.
+	// This library closes the complete pool for a single node.
 	// 0 disconnects on the first error. (Probably not what you want)
-	// 100 means 100% failure allowed, nodes will never disconnect.
-	// Negative values disable failure calculation entirely
-	FailPrecent int
+	// A value >= StatsLen means 100% failure rate allowed.
+	// Negative values disables autoclosing statistics / counting.
+	MaxFails int
 	// Time to wait before attempting to reconnect failed nodes.
 	// Attemps will be done indefinitly.
 	// Set to 0 to disable reconnects.
@@ -69,7 +69,7 @@ func (c Config) Open() (*MultiDB, error) {
 	mdb.all = make([]*Node, len(dataSourceNames))
 
 	for i, dsn := range dataSourceNames {
-		mdb.all[i] = newNode(driverName, dsn, c.StatsLen, c.FailPrecent, c.ReconnectWait)
+		mdb.all[i] = newNode(driverName, dsn, c.StatsLen, c.MaxFails, c.ReconnectWait)
 		if err := mdb.all[i].Open(); err != nil {
 			go mdb.all[i].reconnect()
 		}

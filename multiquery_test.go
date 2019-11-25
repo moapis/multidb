@@ -163,7 +163,7 @@ func multiTestConnect(dsns []string) (*MultiDB, []sm.Sqlmock, error) {
 			dsns: dsns,
 		},
 		StatsLen:      100,
-		FailPrecent:   10,
+		MaxFails:      10,
 		ReconnectWait: 0,
 	}
 	var mocks []sm.Sqlmock

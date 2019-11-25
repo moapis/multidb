@@ -18,16 +18,16 @@ const (
 )
 
 type nodeStats struct {
-	failPercent int
-	fails       []bool
-	pos         int
-	mtx         sync.Mutex
+	maxFails int
+	fails    []bool
+	pos      int
+	mtx      sync.Mutex
 }
 
-func newNodeStats(statsLen, failPercent int) nodeStats {
+func newNodeStats(statsLen, maxFails int) nodeStats {
 	return nodeStats{
-		failPercent: failPercent,
-		fails:       make([]bool, statsLen),
+		maxFails: maxFails,
+		fails:    make([]bool, statsLen),
 	}
 }
 
@@ -44,7 +44,7 @@ func (s *nodeStats) reset() {
 
 // failed counts a failure and calculates if the node is failed
 func (s *nodeStats) failed(state bool) bool {
-	if s.failPercent < 0 || len(s.fails) == 0 {
+	if s.maxFails < 0 || len(s.fails) == 0 {
 		return false
 	}
 
@@ -61,7 +61,7 @@ func (s *nodeStats) failed(state bool) bool {
 	if s.pos++; s.pos >= len(s.fails) {
 		s.pos = 0
 	}
-	return count*100/len(s.fails) > s.failPercent
+	return count > s.maxFails
 }
 
 // Node represents a database server connection
@@ -76,9 +76,9 @@ type Node struct {
 	mtx            sync.RWMutex
 }
 
-func newNode(driverName, dataSourceName string, statsLen, failPercent int, reconnectWait time.Duration) *Node {
+func newNode(driverName, dataSourceName string, statsLen, maxFails int, reconnectWait time.Duration) *Node {
 	return &Node{
-		nodeStats:      newNodeStats(statsLen, failPercent),
+		nodeStats:      newNodeStats(statsLen, maxFails),
 		driverName:     driverName,
 		dataSourceName: dataSourceName,
 		reconnectWait:  reconnectWait,
