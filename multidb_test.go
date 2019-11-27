@@ -432,3 +432,15 @@ func TestMultiDB_All(t *testing.T) {
 		})
 	}
 }
+
+func TestMultiDB_Close(t *testing.T) {
+	mdb, err := testMultiConf.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Log("mdb.Close()")
+	if err := mdb.Close(); err != nil {
+		t.Error(err)
+	}
+}

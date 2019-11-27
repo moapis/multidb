@@ -77,6 +77,24 @@ func (c Config) Open() (*MultiDB, error) {
 	return mdb, nil
 }
 
+// Close the DB connectors on all nodes.
+//
+// The following errors can be returned:
+// - If all nodes respond with the same error, that exact error is returned as-is.
+// - If the is a variaty of errors, they will be embedded in a MultiError return.
+func (mdb *MultiDB) Close() error {
+	mdb.mtx.Lock()
+	defer mdb.mtx.Unlock()
+
+	var me MultiError
+	for _, n := range mdb.all {
+		if err := n.Close(); err != nil {
+			me.append(err)
+		}
+	}
+	return me.check()
+}
+
 func (mdb *MultiDB) setMaster(ctx context.Context) (*Node, error) {
 	mdb.mtx.Lock()
 	defer mdb.mtx.Unlock()
