@@ -16,14 +16,13 @@ func _() boil.ContextExecutor { return MultiNode{} }
 
 // Simple tests for the wrapper methods
 func TestMultiNode_General(t *testing.T) {
-	mdb, mocks, err := multiTestConnect([]string{"a", "b", "c"})
+	t.Log("ExecContext")
+	mdb, mocks, err := multiTestConnect()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mdb.Close()
 	mn := MultiNode(mdb.All())
 
-	t.Log("ExecContext")
 	for _, mock := range mocks {
 		mock.ExpectExec(testQuery).WithArgs(1).WillReturnResult(sm.NewResult(2, 3))
 	}
@@ -37,6 +36,12 @@ func TestMultiNode_General(t *testing.T) {
 	}
 
 	t.Log("Exec")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mn = MultiNode(mdb.All())
+
 	for _, mock := range mocks {
 		mock.ExpectExec(testQuery).WithArgs(1).WillReturnResult(sm.NewResult(2, 3))
 	}
@@ -51,6 +56,12 @@ func TestMultiNode_General(t *testing.T) {
 	want := "value"
 
 	t.Log("QueryContext")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mn = MultiNode(mdb.All())
+
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
 	}
@@ -68,6 +79,12 @@ func TestMultiNode_General(t *testing.T) {
 	}
 
 	t.Log("Query")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mn = MultiNode(mdb.All())
+
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
 	}
@@ -85,6 +102,12 @@ func TestMultiNode_General(t *testing.T) {
 	}
 
 	t.Log("QueryRowContext")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mn = MultiNode(mdb.All())
+
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
 	}
@@ -98,6 +121,12 @@ func TestMultiNode_General(t *testing.T) {
 	}
 
 	t.Log("QueryRow")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mn = MultiNode(mdb.All())
+
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
 	}
@@ -112,14 +141,13 @@ func TestMultiNode_General(t *testing.T) {
 }
 
 func TestMultiNode_BeginTx(t *testing.T) {
-	mdb, mocks, err := multiTestConnect([]string{"d", "e", "f"})
+	t.Log("All nodes healthy")
+	mdb, mocks, err := multiTestConnect()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mdb.Close()
 	mn := MultiNode(mdb.All())
 
-	t.Log("All nodes healthy")
 	for _, mock := range mocks {
 		mock.ExpectBegin()
 	}
@@ -132,6 +160,12 @@ func TestMultiNode_BeginTx(t *testing.T) {
 	}
 
 	t.Log("Healty delayed, two error")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mn = MultiNode(mdb.All())
+
 	for i, mock := range mocks {
 		if i == 0 {
 			mock.ExpectBegin().WillDelayFor(1 * time.Second)
@@ -148,6 +182,12 @@ func TestMultiNode_BeginTx(t *testing.T) {
 	}
 
 	t.Log("All same error")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mn = MultiNode(mdb.All())
+
 	for _, mock := range mocks {
 		mock.ExpectBegin().WillReturnError(sql.ErrConnDone)
 	}
@@ -160,6 +200,12 @@ func TestMultiNode_BeginTx(t *testing.T) {
 	}
 
 	t.Log("Different errors")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mn = MultiNode(mdb.All())
+
 	for i, mock := range mocks {
 		if i == 0 {
 			mock.ExpectBegin().WillReturnError(sql.ErrNoRows)
@@ -180,6 +226,12 @@ func TestMultiNode_BeginTx(t *testing.T) {
 	}
 
 	t.Log("Expire context")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mn = MultiNode(mdb.All())
+
 	for _, mock := range mocks {
 		mock.ExpectBegin().WillDelayFor(1 * time.Second)
 	}
@@ -195,6 +247,12 @@ func TestMultiNode_BeginTx(t *testing.T) {
 	}
 
 	t.Log("Begin wrapper")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mn = MultiNode(mdb.All())
+
 	for _, mock := range mocks {
 		mock.ExpectBegin()
 	}

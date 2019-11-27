@@ -156,39 +156,33 @@ func TestMultiError_check(t *testing.T) {
 	}
 }
 
-func multiTestConnect(dsns []string) (*MultiDB, []sm.Sqlmock, error) {
-	conf := Config{
-		DBConf: testConfig{
-			dn:   testDBDriver,
-			dsns: dsns,
-		},
-		StatsLen:      100,
-		MaxFails:      10,
-		ReconnectWait: 0,
-	}
-	var mocks []sm.Sqlmock
-	for _, dns := range dsns {
-		_, mock, err := sm.NewWithDSN(dns)
+func multiTestConnect() (*MultiDB, []sm.Sqlmock, error) {
+	var (
+		mocks []sm.Sqlmock
+		nodes []*Node
+	)
+	for i := 0; i < 3; i++ {
+		db, mock, err := sm.New()
 		if err != nil {
 			return nil, nil, err
 		}
 		mocks = append(mocks, mock)
+		nodes = append(nodes, &Node{
+			db: db,
+			nodeStats: nodeStats{
+				maxFails: -1,
+			},
+		})
 	}
-	mdb, err := conf.Open()
-	if err != nil {
-		return nil, nil, err
-	}
-	return mdb, mocks, err
+	return &MultiDB{all: nodes}, mocks, nil
 }
 
 func Test_multiExec(t *testing.T) {
-	mdb, mocks, err := multiTestConnect([]string{"g", "h", "i"})
+	t.Log("All nodes healthy")
+	mdb, mocks, err := multiTestConnect()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mdb.Close()
-
-	t.Log("All nodes healthy")
 	for _, mock := range mocks {
 		mock.ExpectExec(testQuery).WithArgs(1).WillReturnResult(sm.NewResult(2, 3))
 	}
@@ -202,6 +196,10 @@ func Test_multiExec(t *testing.T) {
 	}
 
 	t.Log("Healty delayed, two error")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i, mock := range mocks {
 		if i == 0 {
 			mock.ExpectExec(testQuery).WillDelayFor(1 * time.Second).WithArgs(1).WillReturnResult(sm.NewResult(2, 3))
@@ -219,6 +217,10 @@ func Test_multiExec(t *testing.T) {
 	}
 
 	t.Log("All same error")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mock := range mocks {
 		mock.ExpectExec(testQuery).WillReturnError(sql.ErrNoRows)
 	}
@@ -231,6 +233,10 @@ func Test_multiExec(t *testing.T) {
 	}
 
 	t.Log("Different errors")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i, mock := range mocks {
 		if i == 0 {
 			mock.ExpectExec(testQuery).WillReturnError(sql.ErrNoRows)
@@ -251,6 +257,10 @@ func Test_multiExec(t *testing.T) {
 	}
 
 	t.Log("Expire context")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mock := range mocks {
 		mock.ExpectExec(testQuery).WillDelayFor(1 * time.Second).WithArgs(1).WillReturnResult(sm.NewResult(2, 3))
 	}
@@ -267,14 +277,12 @@ func Test_multiExec(t *testing.T) {
 }
 
 func Test_multiQuery(t *testing.T) {
-	mdb, mocks, err := multiTestConnect([]string{"j", "k", "l"})
+	t.Log("All nodes healthy")
+	mdb, mocks, err := multiTestConnect()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mdb.Close()
 	want := "value"
-
-	t.Log("All nodes healthy")
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
 	}
@@ -293,6 +301,10 @@ func Test_multiQuery(t *testing.T) {
 	}
 
 	t.Log("Healty delayed, two error")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i, mock := range mocks {
 		if i == 0 {
 			mock.ExpectQuery(testQuery).WillDelayFor(1 * time.Second).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
@@ -314,6 +326,10 @@ func Test_multiQuery(t *testing.T) {
 	}
 
 	t.Log("All same error")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WillReturnError(sql.ErrNoRows)
 	}
@@ -326,6 +342,10 @@ func Test_multiQuery(t *testing.T) {
 	}
 
 	t.Log("Different errors")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i, mock := range mocks {
 		if i == 0 {
 			mock.ExpectQuery(testQuery).WillReturnError(sql.ErrNoRows)
@@ -346,6 +366,10 @@ func Test_multiQuery(t *testing.T) {
 	}
 
 	t.Log("Expire context")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WillDelayFor(1 * time.Second).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
 	}
@@ -362,14 +386,12 @@ func Test_multiQuery(t *testing.T) {
 }
 
 func Test_multiQueryRow(t *testing.T) {
-	mdb, mocks, err := multiTestConnect([]string{"m", "n", "o"})
+	t.Log("All nodes healthy")
+	mdb, mocks, err := multiTestConnect()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer mdb.Close()
 	want := "value"
-
-	t.Log("All nodes healthy")
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
 	}
@@ -383,6 +405,10 @@ func Test_multiQueryRow(t *testing.T) {
 	}
 
 	t.Log("All same error")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WillReturnError(sql.ErrNoRows)
 	}
@@ -397,6 +423,10 @@ func Test_multiQueryRow(t *testing.T) {
 	}
 
 	t.Log("Expire context")
+	mdb, mocks, err = multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WillDelayFor(1 * time.Second).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
 	}

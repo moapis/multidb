@@ -37,23 +37,29 @@ func TestMultiTx_append(t *testing.T) {
 	}
 }
 
-// Simple tests for the wrapper methods
-func TestMultiTx_General(t *testing.T) {
-	mdb, mocks, err := multiTestConnect([]string{"p", "q", "r"})
+func prepareTestTx() (MultiTx, []sm.Sqlmock, error) {
+	mdb, mocks, err := multiTestConnect()
 	if err != nil {
-		t.Fatal(err)
+		return nil, nil, err
 	}
-	defer mdb.Close()
 	mn := MultiNode(mdb.All())
 	for _, mock := range mocks {
 		mock.ExpectBegin()
 	}
 	tx, err := mn.BeginTx(context.Background(), nil)
 	if err != nil {
+		return nil, nil, err
+	}
+	return tx, mocks, nil
+}
+
+// Simple tests for the wrapper methods
+func TestMultiTx_General(t *testing.T) {
+	t.Log("ExecContext")
+	tx, mocks, err := prepareTestTx()
+	if err != nil {
 		t.Fatal(err)
 	}
-
-	t.Log("ExecContext")
 	for _, mock := range mocks {
 		mock.ExpectExec(testQuery).WithArgs(1).WillReturnResult(sm.NewResult(2, 3))
 	}
@@ -67,6 +73,10 @@ func TestMultiTx_General(t *testing.T) {
 	}
 
 	t.Log("Exec")
+	tx, mocks, err = prepareTestTx()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mock := range mocks {
 		mock.ExpectExec(testQuery).WithArgs(1).WillReturnResult(sm.NewResult(2, 3))
 	}
@@ -82,6 +92,10 @@ func TestMultiTx_General(t *testing.T) {
 	want := "value"
 
 	t.Log("QueryContext")
+	tx, mocks, err = prepareTestTx()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
 	}
@@ -99,6 +113,10 @@ func TestMultiTx_General(t *testing.T) {
 	}
 
 	t.Log("Query")
+	tx, mocks, err = prepareTestTx()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
 	}
@@ -116,6 +134,10 @@ func TestMultiTx_General(t *testing.T) {
 	}
 
 	t.Log("QueryRowContext")
+	tx, mocks, err = prepareTestTx()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
 	}
@@ -129,6 +151,10 @@ func TestMultiTx_General(t *testing.T) {
 	}
 
 	t.Log("QueryRow")
+	tx, mocks, err = prepareTestTx()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
 	}
@@ -143,18 +169,8 @@ func TestMultiTx_General(t *testing.T) {
 }
 
 func TestMultiTx_Rollback(t *testing.T) {
-	mdb, mocks, err := multiTestConnect([]string{"s", "t", "u"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer mdb.Close()
-	mn := MultiNode(mdb.All())
-
 	t.Log("All nodes healthy")
-	for _, mock := range mocks {
-		mock.ExpectBegin()
-	}
-	tx, err := mn.BeginTx(context.Background(), nil)
+	tx, mocks, err := prepareTestTx()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,10 +183,7 @@ func TestMultiTx_Rollback(t *testing.T) {
 	}
 
 	t.Log("1 Healty, two error")
-	for _, mock := range mocks {
-		mock.ExpectBegin()
-	}
-	tx, err = mn.BeginTx(context.Background(), nil)
+	tx, mocks, err = prepareTestTx()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,10 +200,7 @@ func TestMultiTx_Rollback(t *testing.T) {
 	}
 
 	t.Log("Different errors")
-	for _, mock := range mocks {
-		mock.ExpectBegin()
-	}
-	tx, err = mn.BeginTx(context.Background(), nil)
+	tx, mocks, err = prepareTestTx()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,18 +222,8 @@ func TestMultiTx_Rollback(t *testing.T) {
 }
 
 func TestMultiTx_Commit(t *testing.T) {
-	mdb, mocks, err := multiTestConnect([]string{"v", "w", "x"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer mdb.Close()
-	mn := MultiNode(mdb.All())
-
 	t.Log("All nodes healthy")
-	for _, mock := range mocks {
-		mock.ExpectBegin()
-	}
-	tx, err := mn.BeginTx(context.Background(), nil)
+	tx, mocks, err := prepareTestTx()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,10 +236,7 @@ func TestMultiTx_Commit(t *testing.T) {
 	}
 
 	t.Log("1 Healty, two error")
-	for _, mock := range mocks {
-		mock.ExpectBegin()
-	}
-	tx, err = mn.BeginTx(context.Background(), nil)
+	tx, mocks, err = prepareTestTx()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,10 +253,7 @@ func TestMultiTx_Commit(t *testing.T) {
 	}
 
 	t.Log("Different errors")
-	for _, mock := range mocks {
-		mock.ExpectBegin()
-	}
-	tx, err = mn.BeginTx(context.Background(), nil)
+	tx, mocks, err = prepareTestTx()
 	if err != nil {
 		t.Fatal(err)
 	}
