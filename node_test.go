@@ -438,42 +438,55 @@ func TestNode_CheckErr(t *testing.T) {
 		sql.ErrNoRows,
 		sql.ErrTxDone,
 	}
+	// white listed errors, should not close connection
 	for _, w := range whiteErrs {
 		err := n.CheckErr(w)
 		time.Sleep(time.Millisecond)
 		if err != w {
 			t.Errorf("Node.CheckErr() Err = %v, want %v", err, w)
 		}
+
+		n.mtx.RLock()
 		if n.connErr != nil {
 			t.Errorf("Node.CheckErr() connErr = %v, want %v", n.connErr, nil)
 		}
 		if n.db == nil {
 			t.Errorf("Node.CheckErr() DB = %v, want %v", n.db, "DB")
 		}
+		n.mtx.RUnlock()
 	}
+
+	// First connection error, should not close connection
 	err := n.CheckErr(sql.ErrConnDone)
 	time.Sleep(time.Millisecond)
 	if err != sql.ErrConnDone {
 		t.Errorf("Node.CheckErr() Err = %v, want %v", err, sql.ErrConnDone)
 	}
+
+	n.mtx.RLock()
 	if n.connErr != sql.ErrConnDone {
 		t.Errorf("Node.CheckErr() connErr = %v, want %v", n.connErr, sql.ErrConnDone)
 	}
 	if n.db == nil {
 		t.Errorf("Node.CheckErr() DB = %v, want %v", n.db, "DB")
 	}
+	n.mtx.RUnlock()
 
+	// Here the connection should be closed
 	err = n.CheckErr(sql.ErrConnDone)
 	time.Sleep(time.Millisecond)
 	if err != sql.ErrConnDone {
 		t.Errorf("Node.CheckErr() Err = %v, want %v", err, sql.ErrConnDone)
 	}
+
+	n.mtx.RLock()
 	if n.connErr != sql.ErrConnDone {
 		t.Errorf("Node.CheckErr() connErr = %v, want %v", n.connErr, sql.ErrConnDone)
 	}
 	if n.db != nil {
 		t.Errorf("Node.CheckErr() DB = %v, want %v", n.db, nil)
 	}
+	n.mtx.RUnlock()
 }
 
 func TestNode_Exec(t *testing.T) {
