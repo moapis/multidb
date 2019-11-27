@@ -125,8 +125,12 @@ func (n *Node) setReconnecting(s bool) {
 	n.mtx.Unlock()
 }
 
-func (n *Node) reconnect() {
-	for n.reconnectWait != 0 { // 0 means no reconnecting
+func (n *Node) reconnect(ctx context.Context) {
+	if n.reconnectWait == 0 {
+		return
+	}
+
+	for ctx.Err() == nil {
 		n.setReconnecting(true)
 		defer n.setReconnecting(false)
 
@@ -176,7 +180,7 @@ func (n *Node) ConnErr() error {
 func (n *Node) checkFailed(state bool) {
 	if n.failed(state) {
 		n.Close()
-		n.reconnect()
+		n.reconnect(context.Background())
 	}
 }
 

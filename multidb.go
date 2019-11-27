@@ -71,7 +71,7 @@ func (c Config) Open() (*MultiDB, error) {
 	for i, dsn := range dataSourceNames {
 		mdb.all[i] = newNode(driverName, dsn, c.StatsLen, c.MaxFails, c.ReconnectWait)
 		if err := mdb.all[i].Open(); err != nil {
-			go mdb.all[i].reconnect()
+			go mdb.all[i].reconnect(context.TODO())
 		}
 	}
 	return mdb, nil

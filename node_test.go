@@ -337,14 +337,17 @@ func TestNode_reconnect(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
 			if tt.name == "Loop" {
 				// Break the loop after 1 sec.
 				go func() {
 					time.Sleep(time.Second)
-					tt.node.reconnectWait = 0
+					cancel()
 				}()
 			}
-			tt.node.reconnect()
+			tt.node.reconnect(ctx)
 			if (tt.node.db != nil) != tt.wantDB {
 				t.Errorf("Node.Open() DB = %v, wantDB %v", tt.node.db, tt.wantDB)
 			}
