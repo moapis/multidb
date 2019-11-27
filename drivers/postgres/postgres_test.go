@@ -178,3 +178,23 @@ func TestConfig_DriverName(t *testing.T) {
 		})
 	}
 }
+
+func TestConfig_MasterQuery(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		{
+			"MasterQuery",
+			MasterQuery,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var c Config
+			if got := c.MasterQuery(); got != tt.want {
+				t.Errorf("Config.MasterQuery() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

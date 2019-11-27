@@ -11,4 +11,9 @@ type Configurator interface {
 	// DataSourceNames returns a DataSourceName
 	// (aka connection string) for each DB Node.
 	DataSourceNames() []string
+	// MasterQuery returns a query string which is capable of
+	// determining the master state of a DB node.
+	// The query should return `true` if the node is master,
+	// `false` otherwise.
+	MasterQuery() string
 }

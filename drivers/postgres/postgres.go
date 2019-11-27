@@ -58,9 +58,21 @@ func (c Config) DataSourceNames() (snds []string) {
 	return
 }
 
-const driverName = "postgres"
+const (
+	// DriverName for postgres drivers
+	DriverName = "postgres"
+	// MasterQuery returns true when not in recovery (means node is master)
+	MasterQuery = "select not pg_is_in_recovery();"
+)
 
-// DriverName implements driver.Configurator
+// DriverName returns the DriverName constant.
+// Implements driver.Configurator
 func (Config) DriverName() string {
-	return driverName
+	return DriverName
+}
+
+// MasterQuery returns the MasterQuery constant.
+// Implements driver.Configurator
+func (Config) MasterQuery() string {
+	return MasterQuery
 }

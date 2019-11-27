@@ -45,9 +45,10 @@ type Config struct {
 
 // MultiDB holds the multiple DB objects, capable of Writing and Reading.
 type MultiDB struct {
-	master *Node
-	all    []*Node
-	mtx    sync.RWMutex // Protection for reconfiguration
+	masterQuery func() string
+	master      *Node
+	all         []*Node
+	mtx         sync.RWMutex // Protection for reconfiguration
 }
 
 // Open all the configured DB hosts.
@@ -65,7 +66,7 @@ func (c Config) Open() (*MultiDB, error) {
 		return nil, errors.New(ErrNoNodes)
 	}
 
-	mdb := new(MultiDB)
+	mdb := &MultiDB{masterQuery: c.DBConf.MasterQuery}
 	mdb.all = make([]*Node, len(dataSourceNames))
 
 	for i, dsn := range dataSourceNames {
@@ -95,6 +96,37 @@ func (mdb *MultiDB) Close() error {
 	return me.check()
 }
 
+func electMaster(ctx context.Context, nodes []*Node, masterQuery string) *Node {
+	type result struct {
+		node     *Node
+		isMaster bool
+	}
+	if len(nodes) == 0 {
+		return nil
+	}
+	rc := make(chan result, len(nodes))
+	for _, n := range nodes {
+		go func(n *Node) {
+			res := result{node: n}
+			if n == nil {
+				rc <- res
+				return
+			}
+			if err := n.QueryRowContext(ctx, masterQuery).Scan(&res.isMaster); err != nil {
+				n.CheckErr(err) // Should be removed when QueryRowContext becomes error aware
+			}
+			rc <- res
+		}(n)
+	}
+	for i := 0; i < len(nodes); i++ {
+		res := <-rc
+		if res.isMaster {
+			return res.node
+		}
+	}
+	return nil
+}
+
 func (mdb *MultiDB) setMaster(ctx context.Context) (*Node, error) {
 	mdb.mtx.Lock()
 	defer mdb.mtx.Unlock()
@@ -104,10 +136,13 @@ func (mdb *MultiDB) setMaster(ctx context.Context) (*Node, error) {
 		return nil, errors.New(ErrNoNodes)
 	case 1:
 		mdb.master = mdb.all[0]
-		return mdb.master, nil
+	default:
+		mdb.master = electMaster(ctx, mdb.all, mdb.masterQuery())
 	}
-	// TODO: some queries
-	return nil, errors.New(ErrNoMaster)
+	if mdb.master == nil {
+		return nil, errors.New(ErrNoMaster)
+	}
+	return mdb.master, nil
 }
 
 // Master node getter

@@ -6,10 +6,12 @@ package multidb
 
 import (
 	"context"
+	"database/sql"
 	"reflect"
 	"testing"
 	"time"
 
+	sm "github.com/DATA-DOG/go-sqlmock"
 	"github.com/moapis/multidb/drivers"
 )
 
@@ -24,6 +26,10 @@ func (c testConfig) DriverName() string {
 }
 func (c testConfig) DataSourceNames() []string {
 	return c.dsns
+}
+
+func (c testConfig) MasterQuery() string {
+	return "select true;"
 }
 
 func TestConfig_Open(t *testing.T) {
@@ -137,6 +143,58 @@ var (
 	}
 )
 
+func Test_electMaster(t *testing.T) {
+	mocks := map[string]sm.Sqlmock{"master": nil, "slave": nil, "borked": nil, "errored": nil}
+	var (
+		nodes []*Node
+		exp   *Node
+	)
+	for k := range mocks {
+		db, mock, err := sm.New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		mocks[k] = mock
+		node := &Node{
+			db: db,
+			nodeStats: nodeStats{
+				maxFails: -1,
+			},
+		}
+		if k == "master" {
+			exp = node
+		}
+		nodes = append(nodes, node)
+	}
+	nodes = append(nodes, nil)
+
+	mocks["master"].ExpectQuery(testQuery).WillDelayFor(100 * time.Millisecond).WillReturnRows(sm.NewRows([]string{"master"}).AddRow(true))
+	mocks["slave"].ExpectQuery(testQuery).WillDelayFor(50 * time.Millisecond).WillReturnRows(sm.NewRows([]string{"master"}).AddRow(false))
+	mocks["borked"].ExpectQuery(testQuery).WillDelayFor(time.Second)
+	mocks["errored"].ExpectQuery(testQuery).WillReturnError(sql.ErrConnDone)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	got := electMaster(ctx, nodes, testQuery)
+	if !reflect.DeepEqual(exp, got) {
+		t.Errorf("electMaster() = %v, want %v", got, exp)
+	}
+
+	delete(mocks, "master")
+	exp = nil
+	got = electMaster(ctx, nodes, testQuery)
+	if !reflect.DeepEqual(exp, got) {
+		t.Errorf("electMaster() = %v, want %v", got, exp)
+	}
+
+	exp = nil
+	got = electMaster(ctx, nil, testQuery)
+	if !reflect.DeepEqual(exp, got) {
+		t.Errorf("electMaster() = %v, want %v", got, exp)
+	}
+}
+
 func TestMultiDB_setMaster(t *testing.T) {
 	singleMDB, err := testSingleConf.Open()
 	if err != nil {
@@ -172,7 +230,6 @@ func TestMultiDB_setMaster(t *testing.T) {
 			"Multi node",
 			multiMDB,
 			context.Background(),
-			// This will fal untill we implement multi node
 			nil,
 			true,
 		},
