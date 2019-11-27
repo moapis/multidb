@@ -378,30 +378,6 @@ func TestNode_Reconnecting(t *testing.T) {
 	}
 }
 
-func TestNode_DB(t *testing.T) {
-	// n.DB() should catch a <nil> node an prevent panic
-	var n *Node
-	db := n.DB()
-	if db != nil {
-		t.Errorf("Node.DB() DB = %v, want %v", db, nil)
-	}
-
-	n = newNode(testDBDriver, testDSN, 1000, 22, 0)
-	if err := n.Open(); err != nil {
-		t.Fatal(err)
-	}
-	db = n.DB()
-	if db == nil {
-		t.Errorf("Node.DB() DB = %v, want %v", db, "DB")
-	}
-
-	n.Close()
-	db = n.DB()
-	if db != nil {
-		t.Errorf("Node.DB() DB = %v, want %v", db, nil)
-	}
-}
-
 func TestNode_InUse(t *testing.T) {
 	n := newNode(testDBDriver, testDSN, 1000, 22, 0)
 	if err := n.Open(); err != nil {

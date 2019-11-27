@@ -113,13 +113,14 @@ func (mdb *MultiDB) setMaster(ctx context.Context) (*Node, error) {
 // Master node getter
 func (mdb *MultiDB) Master(ctx context.Context) (*Node, error) {
 	mdb.mtx.RLock()
-	master := mdb.master
-	mdb.mtx.RUnlock()
 
-	if db := master.DB(); db == nil {
+	if mdb.master == nil { // || !mdb.master.Ready()
+		mdb.mtx.RUnlock()
 		return mdb.setMaster(ctx)
 	}
-	return master, nil
+
+	defer mdb.mtx.RUnlock()
+	return mdb.master, nil
 }
 
 // MasterTx returns the master node with an opened transaction

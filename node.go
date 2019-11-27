@@ -145,29 +145,16 @@ func (n *Node) Reconnecting() bool {
 	return n.reconnecting
 }
 
-// DB returns the raw sql.DB connection object
-func (n *Node) DB() *sql.DB {
-	if n == nil {
-		return nil
-	}
+// InUse get the InUse counter from db.Stats.
+// Returns -1 in case db is unavailable.
+func (n *Node) InUse() int {
 	n.mtx.RLock()
 	defer n.mtx.RUnlock()
 
 	if n.db == nil {
-		return nil
-	}
-
-	return n.db
-}
-
-// InUse get the InUse counter from db.Stats.
-// Returns -1 in case db is unavailable.
-func (n *Node) InUse() int {
-	db := n.DB()
-	if db == nil {
 		return -1
 	}
-	return db.Stats().InUse
+	return n.db.Stats().InUse
 }
 
 func (n *Node) setErr(err error) {
@@ -215,58 +202,68 @@ func (n *Node) CheckErr(err error) error {
 	return err
 }
 
-// Exec wrapper around sql.DB.Exec.
-// Implements boil.Executor
-func (n *Node) Exec(query string, args ...interface{}) (sql.Result, error) {
-	res, err := n.DB().Exec(query, args...)
-	return res, n.CheckErr(err)
-}
-
-// Query wrapper around sql.DB.Query.
-// Implements boil.Executor
-func (n *Node) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	rows, err := n.DB().Query(query, args...)
-	return rows, n.CheckErr(err)
-}
-
-// QueryRow wrapper around sql.DB.QueryRow.
-// Implements boil.Executor
-// Since errors are defered untill row.Scan, this package cannot monitor such errors.
-func (n *Node) QueryRow(query string, args ...interface{}) *sql.Row {
-	return n.DB().QueryRow(query, args...)
-}
-
 // ExecContext wrapper around sql.DB.Exec.
 // Implements boil.ContextExecutor
 func (n *Node) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	res, err := n.DB().ExecContext(ctx, query, args...)
+	n.mtx.RLock()
+	res, err := n.db.ExecContext(ctx, query, args...)
+	n.mtx.RUnlock()
+
 	return res, n.CheckErr(err)
+}
+
+// Exec wrapper around sql.DB.Exec.
+// Implements boil.Executor
+func (n *Node) Exec(query string, args ...interface{}) (sql.Result, error) {
+	return n.ExecContext(context.Background(), query, args...)
 }
 
 // QueryContext wrapper around sql.DB.Query.
 // Implements boil.ContextExecutor
 func (n *Node) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	rows, err := n.DB().QueryContext(ctx, query, args...)
+	n.mtx.RLock()
+	rows, err := n.db.QueryContext(ctx, query, args...)
+	n.mtx.RUnlock()
+
 	return rows, n.CheckErr(err)
+}
+
+// Query wrapper around sql.DB.Query.
+// Implements boil.Executor
+func (n *Node) Query(query string, args ...interface{}) (*sql.Rows, error) {
+	return n.QueryContext(context.Background(), query, args...)
 }
 
 // QueryRowContext wrapper around sql.DB.QueryRow.
 // Implements boil.ContextExecutor
 // Since errors are defered untill row.Scan, this package cannot monitor such errors.
 func (n *Node) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return n.DB().QueryRowContext(ctx, query, args...)
+	n.mtx.RLock()
+	row := n.db.QueryRowContext(ctx, query, args...)
+	n.mtx.RUnlock()
+
+	return row
 }
 
-// Begin opens a new *sql.Tx inside a Tx.
-// Does NOT implement boil.Beginner, as it requires a *sql.Tx.
-func (n *Node) Begin() (*Tx, error) {
-	tx, err := n.DB().Begin()
-	return &Tx{n, tx}, n.CheckErr(err)
+// QueryRow wrapper around sql.DB.QueryRow.
+// Implements boil.Executor
+// Since errors are defered untill row.Scan, this package cannot monitor such errors.
+func (n *Node) QueryRow(query string, args ...interface{}) *sql.Row {
+	return n.QueryRowContext(context.Background(), query, args...)
 }
 
 // BeginTx opens a new *sql.Tx inside a Tx.
 // Does NOT implement boil.Beginner, as it requires a *sql.Tx.
 func (n *Node) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
-	tx, err := n.DB().BeginTx(ctx, opts)
+	n.mtx.RLock()
+	tx, err := n.db.BeginTx(ctx, opts)
+	n.mtx.RUnlock()
+
 	return &Tx{n, tx}, n.CheckErr(err)
+}
+
+// Begin opens a new *sql.Tx inside a Tx.
+// Does NOT implement boil.Beginner, as it requires a *sql.Tx.
+func (n *Node) Begin() (*Tx, error) {
+	return n.BeginTx(context.Background(), nil)
 }
