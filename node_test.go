@@ -12,6 +12,7 @@ import (
 	"log"
 	"os"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -640,5 +641,147 @@ func TestNode_BeginTx(t *testing.T) {
 	}
 	if tx == nil {
 		t.Errorf("Node.BeginTx() R = %v, want %v", tx, "TX")
+	}
+}
+
+func Test_newEntries(t *testing.T) {
+	var nodes []*Node
+	var exp entries
+	var wg sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		db, mock, err := sm.New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		db.SetMaxOpenConns(10)
+		var mu sync.RWMutex
+		for n := 0; n < i; n++ {
+			mu.Lock()
+			mock.ExpectExec(testQuery).WillDelayFor(time.Second).WillReturnResult(sm.NewResult(2, 2))
+			mu.Unlock()
+		}
+		wg.Add(i)
+		for n := 0; n < i; n++ {
+			// Increase InUse counters
+			go func() {
+				mu.RLock()
+				wg.Done()
+				db.Exec(testQuery)
+				mu.RUnlock()
+			}()
+		}
+		node := &Node{db: db}
+		exp = append(exp, entry{
+			node,
+			float32(i) / 10.0,
+		})
+		nodes = append(nodes, node, nil, &Node{db: nil}) // nil to add some garbage
+	}
+	wg.Wait() // Allow for the exec go-routines to fire.
+	got := newEntries(nodes)
+	if !reflect.DeepEqual(exp, got) {
+		t.Errorf("newEntries() = %v, want %v", got, exp)
+	}
+}
+
+func Test_entries_sortAndSlice(t *testing.T) {
+	nodes := make([]*Node, 10)
+	ent := entries(make([]entry, 10))
+	for i := 0; i < 10; i++ {
+		nodes[i] = &Node{}
+		ent[9-i].node = nodes[i]
+		ent[9-i].factor = float32(i)
+	}
+	tests := []struct {
+		name string
+		ent  entries
+		max  int
+		want []*Node
+	}{
+		{
+			"nil",
+			nil,
+			10,
+			[]*Node{},
+		},
+		{
+			"Reversed list",
+			ent,
+			10,
+			nodes,
+		},
+		{
+			"Limited list",
+			ent,
+			3,
+			nodes[:3],
+		},
+		{
+			"Shorter list",
+			ent[:3],
+			10,
+			nodes[:3],
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.ent.sortAndSlice(tt.max); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("entries.sortAndSlice() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_availableNodes(t *testing.T) {
+	exp := make([]*Node, 10)
+	arg := make([]*Node, 10)
+	for i := 0; i < 10; i++ {
+		n := newNode(testDBDriver, testDSN, 10, 0, 0)
+		if err := n.Open(); err != nil {
+			t.Fatal(err)
+		}
+		exp[i] = n
+		arg[i] = n
+	}
+	type args struct {
+		nodes []*Node
+		max   int
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    []*Node
+		wantErr bool
+	}{
+		{
+			"nil",
+			args{
+				nil,
+				1,
+			},
+			nil,
+			true,
+		},
+		{
+			"Limited list",
+			args{
+				arg,
+				4,
+			},
+			exp[:4],
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := availableNodes(tt.args.nodes, tt.args.max)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("availableNodes() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("availableNodes() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

@@ -501,3 +501,53 @@ func TestMultiDB_Close(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestMultiDB_MultiNode(t *testing.T) {
+	singleMDB, err := testSingleConf.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	multiMDB, err := testMultiConf.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name    string
+		mdb     *MultiDB
+		want    MultiNode
+		wantErr bool
+	}{
+		{
+			"No nodes",
+			&MultiDB{},
+			nil,
+			true,
+		},
+		{
+			"Single node",
+			singleMDB,
+			singleMDB.all,
+			false,
+		},
+		{
+			"Multi node",
+			multiMDB,
+			multiMDB.all,
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mdb := tt.mdb
+			got, err := mdb.MultiNode(10)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("MultiDB.MultiNode() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("MultiDB.MultiNodev() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

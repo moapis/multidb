@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"sort"
 	"sync"
 	"time"
 )
@@ -270,4 +271,62 @@ func (n *Node) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 // Does NOT implement boil.Beginner, as it requires a *sql.Tx.
 func (n *Node) Begin() (*Tx, error) {
 	return n.BeginTx(context.Background(), nil)
+}
+
+type entry struct {
+	node   *Node
+	factor float32
+}
+
+// nodeList implements sort.Interface
+type entries []entry
+
+func (ent entries) Len() int           { return len(ent) }
+func (ent entries) Less(i, j int) bool { return ent[i].factor < ent[j].factor }
+func (ent entries) Swap(i, j int)      { ent[i], ent[j] = ent[j], ent[i] }
+
+func newEntries(nodes []*Node) entries {
+	var ent entries
+	for _, n := range nodes {
+		if n != nil && n.db != nil {
+			st := n.db.Stats()
+			ent = append(ent, entry{
+				node:   n,
+				factor: float32(st.InUse) / float32(st.MaxOpenConnections),
+			})
+		}
+	}
+	return ent
+}
+
+// sortAndSlice sorts the entries and return up to `no` amount of Nodes.
+func (ent entries) sortAndSlice(max int) []*Node {
+	sort.Sort(ent)
+
+	if len(ent) < max {
+		max = len(ent)
+	}
+
+	nodes := make([]*Node, max)
+	for i := 0; i < max; i++ {
+		nodes[i] = ent[i].node
+	}
+	return nodes
+}
+
+// availableNodes returns a slice of available *Node.
+// The slice is sorted by the division of InUse/MaxOpenConnections.
+// Up to `no` amount of nodes is in the returned slice.
+// Nil is returned in case no nodes are available.
+func availableNodes(nodes []*Node, max int) ([]*Node, error) {
+	for _, n := range nodes {
+		n.mtx.RLock()
+		defer n.mtx.RUnlock()
+	}
+
+	ent := newEntries(nodes)
+	if ent == nil {
+		return nil, errors.New(ErrNoNodes)
+	}
+	return ent.sortAndSlice(max), nil
 }

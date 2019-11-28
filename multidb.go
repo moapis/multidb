@@ -167,25 +167,20 @@ func (mdb *MultiDB) MasterTx(ctx context.Context, opts *sql.TxOptions) (*Tx, err
 	return master.BeginTx(ctx, opts)
 }
 
-// Node returns any Ready node with the lowest usage counter
+// Node returns any Ready node with the lowest value after
+// division of InUse/MaxOpenConnections.
+//
 // The returned node may be master or slave and should
 // only be used for read operations.
 func (mdb *MultiDB) Node() (*Node, error) {
 	mdb.mtx.RLock()
 	defer mdb.mtx.RUnlock()
 
-	var node *Node
-	var use int
-	for _, n := range mdb.all {
-		u := n.InUse()
-		if node == nil || (u >= 0 && u < use) {
-			node, use = n, u
-		}
+	nodes, err := availableNodes(mdb.all, 1)
+	if err != nil {
+		return nil, err
 	}
-	if node == nil {
-		return nil, errors.New(ErrNoNodes)
-	}
-	return node, nil
+	return nodes[0], nil
 }
 
 // NodeTx returns any node with an opened transaction
@@ -203,4 +198,18 @@ func (mdb *MultiDB) All() []*Node {
 	defer mdb.mtx.RUnlock()
 
 	return mdb.all
+}
+
+// MultiNode returns available *Nodes.
+// Nodes are sorted by the division of InUse/MaxOpenConnections.
+// Up to `max` amount of nodes will be in the returned object.
+// An error is returned in case no nodes are available.
+//
+// The nodes may be master or slaves and should
+// only be used for read operations.
+func (mdb *MultiDB) MultiNode(max int) (MultiNode, error) {
+	mdb.mtx.RLock()
+	defer mdb.mtx.RUnlock()
+
+	return availableNodes(mdb.all, max)
 }
