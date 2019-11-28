@@ -85,9 +85,6 @@ func multiExec(ctx context.Context, xs []executor, query string, args ...interfa
 	var me MultiError
 	for i := 0; i < len(xs); i++ {
 		select {
-		case <-ctx.Done():
-			me.append(ctx.Err())
-			return nil, me.check()
 		case err := <-ec:
 			me.append(err)
 		case res := <-rc: // Return on the first success
@@ -115,9 +112,6 @@ func multiQuery(ctx context.Context, xs []executor, query string, args ...interf
 	var me MultiError
 	for i := 0; i < len(xs); i++ {
 		select {
-		case <-ctx.Done():
-			me.append(ctx.Err())
-			return nil, me.check()
 		case err := <-ec:
 			me.append(err)
 		case rows := <-rc: // Return on the first success

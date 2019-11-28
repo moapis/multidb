@@ -255,25 +255,6 @@ func Test_multiExec(t *testing.T) {
 	if got != nil {
 		t.Errorf("multiExec() Res = %v, want %v", got, nil)
 	}
-
-	t.Log("Expire context")
-	mdb, mocks, err = multiTestConnect()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, mock := range mocks {
-		mock.ExpectExec(testQuery).WillDelayFor(1 * time.Second).WithArgs(1).WillReturnResult(sm.NewResult(2, 3))
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-
-	got, err = multiExec(ctx, nodes2Exec(mdb.All()), testQuery, 1)
-	if err != context.DeadlineExceeded {
-		t.Errorf("multiExec() expected err: %v, got: %v", context.DeadlineExceeded, err)
-	}
-	if got != nil {
-		t.Errorf("multiExec() Res = %v, want %v", got, nil)
-	}
 }
 
 func Test_multiQuery(t *testing.T) {
@@ -364,25 +345,6 @@ func Test_multiQuery(t *testing.T) {
 	if rows != nil {
 		t.Errorf("multiQuery() Res = %v, want %v", rows, nil)
 	}
-
-	t.Log("Expire context")
-	mdb, mocks, err = multiTestConnect()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, mock := range mocks {
-		mock.ExpectQuery(testQuery).WillDelayFor(1 * time.Second).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-
-	rows, err = multiQuery(ctx, nodes2Exec(mdb.All()), testQuery, 1)
-	if err != context.DeadlineExceeded {
-		t.Errorf("multiQuery() expected err: %v, got: %v", context.DeadlineExceeded, err)
-	}
-	if rows != nil {
-		t.Errorf("multiQuery() Res = %v, want %v", got, nil)
-	}
 }
 
 func Test_multiQueryRow(t *testing.T) {
@@ -420,26 +382,5 @@ func Test_multiQueryRow(t *testing.T) {
 	}
 	if got != "" {
 		t.Errorf("multiQueryRow() Res = %v, want %v", got, "")
-	}
-
-	t.Log("Expire context")
-	mdb, mocks, err = multiTestConnect()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, mock := range mocks {
-		mock.ExpectQuery(testQuery).WillDelayFor(1 * time.Second).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-
-	row = multiQueryRow(ctx, nodes2Exec(mdb.All()), testQuery, 1)
-	got = ""
-	err = row.Scan(&got)
-	if err == nil || err.Error() != "canceling query due to user request" {
-		t.Errorf("Expected err: %v, got: %v", context.DeadlineExceeded, err)
-	}
-	if got != "" {
-		t.Errorf("multiQueryRow() Res = %v, want %v", got, nil)
 	}
 }

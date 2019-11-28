@@ -102,9 +102,6 @@ func (mn MultiNode) BeginTx(ctx context.Context, opts *sql.TxOptions) (MultiTx, 
 	var mtx MultiTx
 	for i := 0; i < len(mn); i++ {
 		select {
-		case <-ctx.Done():
-			me.append(ctx.Err())
-			return nil, me.check()
 		case err := <-ec:
 			me.append(err)
 		case tx := <-tc:

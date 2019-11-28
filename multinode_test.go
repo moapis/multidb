@@ -225,27 +225,6 @@ func TestMultiNode_BeginTx(t *testing.T) {
 		t.Errorf("mtx.BeginTx() Res = %v, want %v", tx, nil)
 	}
 
-	t.Log("Expire context")
-	mdb, mocks, err = multiTestConnect()
-	if err != nil {
-		t.Fatal(err)
-	}
-	mn = MultiNode(mdb.All())
-
-	for _, mock := range mocks {
-		mock.ExpectBegin().WillDelayFor(1 * time.Second)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-
-	tx, err = mn.BeginTx(ctx, nil)
-	if err != context.DeadlineExceeded {
-		t.Errorf("mtx.BeginTx() expected err: %v, got: %v", context.DeadlineExceeded, err)
-	}
-	if tx != nil {
-		t.Errorf("mtx.BeginTx() Res = %v, want %v", tx, nil)
-	}
-
 	t.Log("Begin wrapper")
 	mdb, mocks, err = multiTestConnect()
 	if err != nil {
