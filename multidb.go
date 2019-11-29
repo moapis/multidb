@@ -29,6 +29,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -39,7 +40,7 @@ const (
 	// ErrNoNodes is returned when there are no connected nodes available for the requested operation
 	ErrNoNodes = "No available nodes"
 	// ErrNoMaster is returned when no master is available
-	ErrNoMaster = "No available master"
+	ErrNoMaster = "No available master, cause: %w"
 	// ErrSuccesReq is returned when higher than 1.0
 	ErrSuccesReq = "SuccesReq > 1"
 )
@@ -111,35 +112,42 @@ func (mdb *MultiDB) Close() error {
 	return me.check()
 }
 
-func electMaster(ctx context.Context, nodes []*Node) *Node {
+func electMaster(ctx context.Context, nodes []*Node) (*Node, error) {
 	type result struct {
 		node     *Node
+		err      error
 		isMaster bool
 	}
-	if len(nodes) == 0 {
-		return nil
-	}
-	rc := make(chan result, len(nodes))
+	var available []*Node
 	for _, n := range nodes {
+		if n != nil && n.db != nil {
+			available = append(available, n)
+		}
+	}
+	if len(available) == 0 {
+		return nil, errors.New(ErrNoNodes)
+	}
+	rc := make(chan result, len(available))
+	for _, n := range available {
 		go func(n *Node) {
 			res := result{node: n}
-			if n == nil {
-				rc <- res
-				return
-			}
 			if err := n.QueryRowContext(ctx, n.MasterQuery()).Scan(&res.isMaster); err != nil {
-				n.CheckErr(err) // Should be removed when QueryRowContext becomes error aware
+				res.err = n.CheckErr(err) // Should be removed when QueryRowContext becomes error aware
 			}
 			rc <- res
 		}(n)
 	}
-	for i := 0; i < len(nodes); i++ {
+	var me MultiError
+	for i := 0; i < len(available); i++ {
 		res := <-rc
 		if res.isMaster {
-			return res.node
+			return res.node, nil
+		}
+		if res.err != nil {
+			me.Errors = append(me.Errors, res.err)
 		}
 	}
-	return nil
+	return nil, me.check()
 }
 
 func (mdb *MultiDB) setMaster(ctx context.Context) (*Node, error) {
@@ -148,16 +156,18 @@ func (mdb *MultiDB) setMaster(ctx context.Context) (*Node, error) {
 
 	switch len(mdb.all) {
 	case 0:
-		return nil, errors.New(ErrNoNodes)
+		return nil, fmt.Errorf(ErrNoMaster, errors.New(ErrNoNodes))
 	case 1:
 		mdb.master = mdb.all[0]
+		return mdb.master, nil
 	default:
-		mdb.master = electMaster(ctx, mdb.all)
+		var err error
+		mdb.master, err = electMaster(ctx, mdb.all)
+		if err != nil {
+			err = fmt.Errorf(ErrNoMaster, err)
+		}
+		return mdb.master, err
 	}
-	if mdb.master == nil {
-		return nil, errors.New(ErrNoMaster)
-	}
-	return mdb.master, nil
 }
 
 // Master node getter

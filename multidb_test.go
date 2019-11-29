@@ -161,20 +161,37 @@ func Test_electMaster(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	got := electMaster(ctx, nodes)
+	got, err := electMaster(ctx, nodes)
+	if err != nil {
+		t.Error(err)
+	}
 	if !reflect.DeepEqual(exp, got) {
 		t.Errorf("electMaster() = %v, want %v", got, exp)
 	}
 
 	delete(mocks, "master")
+	mocks["slave"].ExpectQuery(q).WillDelayFor(50 * time.Millisecond).WillReturnRows(sm.NewRows([]string{"master"}).AddRow(false))
+	mocks["borked"].ExpectQuery(q).WillDelayFor(time.Second).WillReturnRows(sm.NewRows([]string{"master"}).AddRow(false))
+	mocks["errored"].ExpectQuery(q).WillReturnError(sql.ErrConnDone)
+	exp.Close()
 	exp = nil
-	got = electMaster(ctx, nodes)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	got, err = electMaster(ctx, nodes)
+	_, ok := err.(MultiError)
+	if !ok {
+		t.Errorf("electMaster() err = %T, want %T", err, MultiError{})
+	}
 	if !reflect.DeepEqual(exp, got) {
 		t.Errorf("electMaster() = %v, want %v", got, exp)
 	}
 
-	exp = nil
-	got = electMaster(ctx, nil)
+	got, err = electMaster(ctx, nil)
+	if err == nil || err.Error() != ErrNoNodes {
+		t.Errorf("electMaster() err = %v, want %v", err, ErrNoNodes)
+	}
 	if !reflect.DeepEqual(exp, got) {
 		t.Errorf("electMaster() = %v, want %v", got, exp)
 	}
