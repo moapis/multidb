@@ -7,12 +7,15 @@ package multidb
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"log"
 	"reflect"
 	"testing"
 	"time"
 
 	sm "github.com/DATA-DOG/go-sqlmock"
 	"github.com/moapis/multidb/drivers"
+	"github.com/moapis/multidb/drivers/postgresql"
 )
 
 func TestConfig_Open(t *testing.T) {
@@ -108,6 +111,96 @@ func TestConfig_Open(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func Example() {
+	c := Config{
+		DBConf: postgresql.Config{
+			Hosts: []postgresql.Host{
+				{
+					Addr: "db1.example.com",
+					Port: 5432,
+				},
+				{
+					Addr: "db2.example.com",
+					Port: 5432,
+				},
+				{
+					Addr: "db3.example.com",
+					Port: 5432,
+				},
+			},
+			Params: map[string]string{
+				"dbname":          "multidb",
+				"user":            "postgres",
+				"password":        "",
+				"sslmode":         "disable",
+				"connect_timeout": "30",
+			},
+		},
+		StatsLen:      100,
+		MaxFails:      10,
+		ReconnectWait: 10 * time.Second,
+	}
+	// Connect to all specified DB Hosts
+	mdb, err := c.Open()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer mdb.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	// Open a TX for insertion on the master.
+	// Master assertion is done in the background on first access.
+	tx, err := mdb.MasterTx(ctx, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer tx.Rollback()
+
+	// Do stuff inside the transaction
+	if _, err = tx.ExecContext(ctx, "CREATE TABLE content ( id INTEGER PRIMARY KEY );"); err != nil {
+		log.Fatal(err)
+	}
+	if _, err = tx.ExecContext(ctx, "INSERT INTO content (id) VALUES ($1);", 999); err != nil {
+		log.Fatal(err)
+	}
+	if _, err = tx.ExecContext(ctx, "INSERT INTO content (id) VALUES ($1);", 101); err != nil {
+		log.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		log.Fatal(err)
+	}
+
+	// Acquire 3 nodes for select operation
+	mn, err := mdb.MultiNode(3)
+	if err != nil {
+		log.Fatal(err)
+	}
+	rows, err := mn.QueryContext(ctx, "SELECT id FROM content WHERE id = $1", 999)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for rows.Next() {
+		var i int
+		if err = rows.Scan(&i); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(i)
+	}
+
+	// Acquire the master node without Tx
+	master, err := mdb.Master(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Exec without context
+	if _, err = master.Exec("DROP TABLE content"); err != nil {
+		log.Fatal(err)
 	}
 }
 
