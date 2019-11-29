@@ -178,7 +178,7 @@ func (n *Node) ConnErr() error {
 }
 
 // checkFailed closes this Node's DB pool if failed.
-// Afer closing the reconnector is initiated, if applicable.
+// After closing reconnection is initiated, if applicable.
 func (n *Node) checkFailed(state bool) {
 	if n.failed(state) {
 		n.Close()
@@ -186,7 +186,7 @@ func (n *Node) checkFailed(state bool) {
 	}
 }
 
-// CheckErr updates the statistcs. If the error is nil or whitelisted, success is recorded.
+// CheckErr updates the statistics. If the error is nil or whitelisted, success is recorded.
 // Any other case constitutes an error and failure is recorded.
 // If a the configured failure trashhold is reached, this node will we disconnected.
 //
@@ -240,9 +240,12 @@ func (n *Node) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	return n.QueryContext(context.Background(), query, args...)
 }
 
+// BUG(muhlemmer): Can't check errors on sql.Row
+// https://github.com/moapis/multidb/issues/1
+
 // QueryRowContext wrapper around sql.DB.QueryRow.
 // Implements boil.ContextExecutor
-// Since errors are defered untill row.Scan, this package cannot monitor such errors.
+// Since errors are deferred until row.Scan, this package cannot monitor such errors.
 func (n *Node) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	n.mtx.RLock()
 	row := n.db.QueryRowContext(ctx, query, args...)
@@ -253,13 +256,15 @@ func (n *Node) QueryRowContext(ctx context.Context, query string, args ...interf
 
 // QueryRow wrapper around sql.DB.QueryRow.
 // Implements boil.Executor
-// Since errors are defered untill row.Scan, this package cannot monitor such errors.
+// Since errors are deferred until row.Scan, this package cannot monitor such errors.
 func (n *Node) QueryRow(query string, args ...interface{}) *sql.Row {
 	return n.QueryRowContext(context.Background(), query, args...)
 }
 
+// BUG(muhlemmer): Node types do not implement boil.Beginner
+// https://github.com/moapis/multidb/issues/2
+
 // BeginTx opens a new *sql.Tx inside a Tx.
-// Does NOT implement boil.Beginner, as it requires a *sql.Tx.
 func (n *Node) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 	n.mtx.RLock()
 	tx, err := n.db.BeginTx(ctx, opts)

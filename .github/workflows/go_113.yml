@@ -1,4 +1,4 @@
-name: Go 1.13
+name: Go1.13
 on:
   push:
     branches: 

@@ -2,6 +2,27 @@
 // Use of this source code is governed by a License that can be found in the LICENSE file.
 // SPDX-License-Identifier: BSD-3-Clause
 
+/*
+Package multidb provides a sql.DB multiplexer for parallel queries using Go routines.
+It is meant as a top-level library which connects to a number of database Nodes.
+Nodes' health conditions are monitored by inspecting returning errors.
+After a (settable) threshold or errors has passed,
+a Node is disconnected and considered unavailable for subsequent requests.
+Failed nodes can be reconnected automatically.
+
+Multidb automatically polls which of the connected Nodes is a master.
+If the master fails, multidb will try to find a new master,
+which might be found after promotion took place on a slave
+or the old master gets reconnected.
+Actual management of master and slaves (such as promotion)
+is considered outside the scope of this package.
+
+The Node and MultiNode types aim to be interface compatible with sql.DB and sql.Tx.
+More specifically, multidb fully implements SQLBoiler's boil.Executor and
+boil.ContextExecutor interface types.
+This makes it an excellent fit for SQLBoiler.
+(And perhaps other ORMs?)
+*/
 package multidb
 
 import (
@@ -38,7 +59,7 @@ type Config struct {
 	// Negative values disables autoclosing statistics / counting.
 	MaxFails int
 	// Time to wait before attempting to reconnect failed nodes.
-	// Attemps will be done indefinitly.
+	// Attempts will be done indefinitely.
 	// Set to 0 to disable reconnects.
 	ReconnectWait time.Duration
 }
@@ -75,9 +96,8 @@ func (c Config) Open() (*MultiDB, error) {
 
 // Close the DB connectors on all nodes.
 //
-// The following errors can be returned:
-// - If all nodes respond with the same error, that exact error is returned as-is.
-// - If the is a variaty of errors, they will be embedded in a MultiError return.
+// If all nodes respond with the same error, that exact error is returned as-is.
+// If there is a variety of errors, they will be embedded in a MultiError return.
 func (mdb *MultiDB) Close() error {
 	mdb.mtx.Lock()
 	defer mdb.mtx.Unlock()
@@ -162,7 +182,7 @@ func (mdb *MultiDB) MasterTx(ctx context.Context, opts *sql.TxOptions) (*Tx, err
 	return master.BeginTx(ctx, opts)
 }
 
-// Node returns any Ready node with the lowest value after
+// Node returns any ready Mode with the lowest value after
 // division of InUse/MaxOpenConnections.
 //
 // The returned node may be master or slave and should
@@ -178,7 +198,7 @@ func (mdb *MultiDB) Node() (*Node, error) {
 	return nodes[0], nil
 }
 
-// NodeTx returns any node with an opened transaction
+// NodeTx returns any node with an opened transaction.
 func (mdb *MultiDB) NodeTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 	node, err := mdb.Node()
 	if err != nil {

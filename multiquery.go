@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// MultiError is a collection of errors which can arise from paralell query execution
+// MultiError is a collection of errors which can arise from parallel query execution.
 type MultiError struct {
 	Errors []error
 }
