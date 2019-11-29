@@ -309,7 +309,7 @@ func newEntries(nodes []*Node) entries {
 func (ent entries) sortAndSlice(max int) []*Node {
 	sort.Sort(ent)
 
-	if len(ent) < max {
+	if len(ent) < max || max == 0 {
 		max = len(ent)
 	}
 

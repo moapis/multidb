@@ -745,7 +745,7 @@ func Test_entries_sortAndSlice(t *testing.T) {
 		{
 			"Reversed list",
 			ent,
-			10,
+			0,
 			nodes,
 		},
 		{

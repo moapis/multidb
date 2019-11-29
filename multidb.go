@@ -228,6 +228,7 @@ func (mdb *MultiDB) All() []*Node {
 // MultiNode returns available *Nodes.
 // Nodes are sorted by the division of InUse/MaxOpenConnections.
 // Up to `max` amount of nodes will be in the returned object.
+// If `max` is set to 0, all available nodes are returned.
 // An error is returned in case no nodes are available.
 //
 // The nodes may be master or slaves and should
