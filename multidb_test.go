@@ -641,8 +641,36 @@ func TestMultiDB_MultiNode(t *testing.T) {
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("MultiDB.MultiNodev() = %v, want %v", got, tt.want)
+				t.Errorf("MultiDB.MultiNode() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestMultiDB_MultiTx(t *testing.T) {
+	t.Log("All nodes healthy")
+	mdb, mocks, err := multiTestConnect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mock := range mocks {
+		mock.ExpectBegin()
+	}
+	tx, err := mdb.MultiTx(context.Background(), nil, 3)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(tx) != 3 {
+		t.Errorf("mtx.BeginTx() len of tx = %v, want %v", len(tx), 3)
+	}
+
+	t.Log("No nodes")
+	mdb.all = nil
+	tx, err = mdb.MultiTx(context.Background(), nil, 3)
+	if err == nil || err.Error() != ErrNoNodes {
+		t.Errorf("Expected err: %v, got: %v", sql.ErrConnDone, err)
+	}
+	if tx != nil {
+		t.Errorf("mtx.BeginTx() Res = %v, want %v", tx, nil)
 	}
 }

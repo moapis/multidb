@@ -238,3 +238,12 @@ func (mdb *MultiDB) MultiNode(max int) (MultiNode, error) {
 
 	return availableNodes(mdb.all, max)
 }
+
+// MultiTx returns a MultiNode with an open transaction
+func (mdb *MultiDB) MultiTx(ctx context.Context, opts *sql.TxOptions, max int) (MultiTx, error) {
+	mn, err := mdb.MultiNode(max)
+	if err != nil {
+		return nil, err
+	}
+	return mn.BeginTx(ctx, opts)
+}
