@@ -1,4 +1,4 @@
-name: Go test
+name: Go 1.13
 on:
   push:
     branches: 
