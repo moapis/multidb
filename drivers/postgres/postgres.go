@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/lib/pq"
 )
 
 // connString build the connection string for host with params
@@ -75,4 +77,35 @@ func (Config) DriverName() string {
 // Implements driver.Configurator
 func (Config) MasterQuery() string {
 	return MasterQuery
+}
+
+var (
+	blackListClasses = []string{
+		"08", // Connection Exception
+		"3B", // Savepoint Exception
+		"53", // Insufficient Resources
+		"57", // Operator Intervention
+		"58", // System Error (errors external to PostgreSQL itself)
+		"F0", // Configuration File Error
+		"XX", // Internal Error
+	}
+)
+
+// WhiteList returns true if the passed error is not a connection on DB consistency error.
+// It used pq error codes for checking
+func (Config) WhiteList(err error) bool {
+	if err == nil {
+		return true
+	}
+	pqe, ok := err.(pq.Error)
+	if !ok {
+		return false
+	}
+	class := string(pqe.Code.Class())
+	for _, blc := range blackListClasses {
+		if class == blc {
+			return false
+		}
+	}
+	return true
 }

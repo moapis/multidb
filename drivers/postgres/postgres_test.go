@@ -5,14 +5,16 @@
 package postgresql
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
+	"github.com/lib/pq"
 	"github.com/moapis/multidb/drivers"
 )
 
 // Check interface compliance
-var _ = drivers.Configurator(Config{})
+func _() drivers.Configurator { return Config{} }
 
 func Test_connString(t *testing.T) {
 	type args struct {
@@ -194,6 +196,43 @@ func TestConfig_MasterQuery(t *testing.T) {
 			var c Config
 			if got := c.MasterQuery(); got != tt.want {
 				t.Errorf("Config.MasterQuery() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConfig_WhiteList(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			"Nil error",
+			nil,
+			true,
+		},
+		{
+			"Non-pg error",
+			errors.New("Something new"),
+			false,
+		},
+		{
+			"BlackList error",
+			pq.Error{Code: "XX000"},
+			false,
+		},
+		{
+			"WhiteList error",
+			pq.Error{Code: "01000"},
+			true,
+		},
+	}
+	c := Config{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := c.WhiteList(tt.err); got != tt.want {
+				t.Errorf("Config.WhiteList() = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -27,6 +27,12 @@ const (
 	testQuery    = "select;"
 )
 
+type testError struct{}
+
+func (testError) Error() string {
+	return "I'm a test error"
+}
+
 // testConfig implements a naive drivers.Configurator
 type testConfig struct {
 	dn   string
@@ -42,6 +48,11 @@ func (c testConfig) DataSourceNames() []string {
 
 func (c testConfig) MasterQuery() string {
 	return "select true;"
+}
+
+func (c testConfig) WhiteList(err error) bool {
+	_, ok := err.(testError)
+	return ok
 }
 
 func defaultTestConfig() testConfig {
@@ -464,6 +475,7 @@ func TestNode_CheckErr(t *testing.T) {
 		nil,
 		sql.ErrNoRows,
 		sql.ErrTxDone,
+		testError{},
 	}
 	// white listed errors, should not close connection
 	for _, w := range whiteErrs {

@@ -199,8 +199,8 @@ func (n *Node) CheckErr(err error) error {
 		go n.checkFailed(false)
 	case err == sql.ErrNoRows || err == sql.ErrTxDone:
 		go n.checkFailed(false)
-	//case whiteList(err):
-	//	go n.checkFailed(true)
+	case n.WhiteList(err):
+		go n.checkFailed(false)
 	default:
 		n.setErr(err)
 		go n.checkFailed(true)

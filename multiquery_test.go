@@ -168,7 +168,8 @@ func multiTestConnect() (*MultiDB, []sm.Sqlmock, error) {
 		}
 		mocks = append(mocks, mock)
 		nodes = append(nodes, &Node{
-			db: db,
+			Configurator: defaultTestConfig(),
+			db:           db,
 			nodeStats: nodeStats{
 				maxFails: -1,
 			},
