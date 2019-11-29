@@ -17,6 +17,7 @@ import (
 	"time"
 
 	sm "github.com/DATA-DOG/go-sqlmock"
+	"github.com/moapis/multidb/drivers"
 	"github.com/volatiletech/sqlboiler/boil"
 )
 
@@ -25,6 +26,30 @@ const (
 	testDSN      = "file::memory:"
 	testQuery    = "select;"
 )
+
+// testConfig implements a naive drivers.Configurator
+type testConfig struct {
+	dn   string
+	dsns []string
+}
+
+func (c testConfig) DriverName() string {
+	return c.dn
+}
+func (c testConfig) DataSourceNames() []string {
+	return c.dsns
+}
+
+func (c testConfig) MasterQuery() string {
+	return "select true;"
+}
+
+func defaultTestConfig() testConfig {
+	return testConfig{
+		testDBDriver,
+		[]string{testDSN, testDSN, testDSN},
+	}
+}
 
 // Interface implementation checks
 func _() boil.Executor        { return &Node{} }
@@ -159,7 +184,7 @@ func Test_nodeStats_failed(t *testing.T) {
 
 func Test_newNode(t *testing.T) {
 	type args struct {
-		driverName     string
+		conf           testConfig
 		dataSourceName string
 		statsLen       int
 		maxFails       int
@@ -173,7 +198,7 @@ func Test_newNode(t *testing.T) {
 		{
 			"SQLite3",
 			args{
-				driverName:     testDBDriver,
+				conf:           defaultTestConfig(),
 				dataSourceName: testDSN,
 				statsLen:       1000,
 				maxFails:       22,
@@ -184,7 +209,7 @@ func Test_newNode(t *testing.T) {
 					maxFails: 22,
 					fails:    make([]bool, 1000),
 				},
-				driverName:     testDBDriver,
+				Configurator:   defaultTestConfig(),
 				dataSourceName: testDSN,
 				reconnectWait:  5 * time.Second,
 			},
@@ -192,7 +217,7 @@ func Test_newNode(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := newNode(tt.args.driverName, tt.args.dataSourceName, tt.args.statsLen, tt.args.maxFails, tt.args.reconnectWait); !reflect.DeepEqual(got, tt.want) {
+			if got := newNode(tt.args.conf, tt.args.dataSourceName, tt.args.statsLen, tt.args.maxFails, tt.args.reconnectWait); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("newNode() = %v, want %v", got, tt.want)
 			}
 		})
@@ -201,9 +226,10 @@ func Test_newNode(t *testing.T) {
 
 func TestNode_Open(t *testing.T) {
 	type args struct {
-		driverName, dataSourceName string
-		statsLen, maxFails         int
-		reconnectWait              time.Duration
+		conf               drivers.Configurator
+		dataSourceName     string
+		statsLen, maxFails int
+		reconnectWait      time.Duration
 	}
 	tests := []struct {
 		name    string
@@ -213,7 +239,7 @@ func TestNode_Open(t *testing.T) {
 		{
 			"Success",
 			args{
-				driverName:     testDBDriver,
+				conf:           defaultTestConfig(),
 				dataSourceName: testDSN,
 				statsLen:       1000,
 				maxFails:       22,
@@ -224,7 +250,7 @@ func TestNode_Open(t *testing.T) {
 		{
 			ErrAlreadyOpen,
 			args{
-				driverName:     testDBDriver,
+				conf:           defaultTestConfig(),
 				dataSourceName: testDSN,
 				statsLen:       1000,
 				maxFails:       22,
@@ -235,7 +261,7 @@ func TestNode_Open(t *testing.T) {
 		{
 			"Bogus",
 			args{
-				driverName:     "foo",
+				conf:           testConfig{dn: "foo"},
 				dataSourceName: "bar",
 				statsLen:       1000,
 				maxFails:       22,
@@ -246,7 +272,7 @@ func TestNode_Open(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := newNode(tt.args.driverName, tt.args.dataSourceName, tt.args.statsLen, tt.args.maxFails, tt.args.reconnectWait)
+			n := newNode(tt.args.conf, tt.args.dataSourceName, tt.args.statsLen, tt.args.maxFails, tt.args.reconnectWait)
 			if tt.name == ErrAlreadyOpen {
 				if err := n.Open(); err != nil {
 					t.Fatal(err)
@@ -269,12 +295,12 @@ func TestNode_Close(t *testing.T) {
 	}{
 		{
 			"Open",
-			newNode(testDBDriver, testDSN, 1000, 22, 0),
+			newNode(defaultTestConfig(), testDSN, 1000, 22, 0),
 			false,
 		},
 		{
 			"Closed",
-			newNode(testDBDriver, testDSN, 1000, 22, 0),
+			newNode(defaultTestConfig(), testDSN, 1000, 22, 0),
 			true,
 		},
 	}
@@ -295,7 +321,7 @@ func TestNode_Close(t *testing.T) {
 }
 
 func TestNode_setReconnecting(t *testing.T) {
-	n := newNode(testDBDriver, testDSN, 1000, 22, 0)
+	n := newNode(defaultTestConfig(), testDSN, 1000, 22, 0)
 	tests := []bool{true, true, false, true}
 	for _, b := range tests {
 		n.setReconnecting(b)
@@ -306,7 +332,7 @@ func TestNode_setReconnecting(t *testing.T) {
 }
 
 func TestNode_reconnect(t *testing.T) {
-	opened := newNode(testDBDriver, testDSN, 1000, 22, 5*time.Millisecond)
+	opened := newNode(defaultTestConfig(), testDSN, 1000, 22, 5*time.Millisecond)
 	if err := opened.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +343,7 @@ func TestNode_reconnect(t *testing.T) {
 	}{
 		{
 			"Close to open",
-			newNode(testDBDriver, testDSN, 1000, 22, 5*time.Millisecond),
+			newNode(defaultTestConfig(), testDSN, 1000, 22, 5*time.Millisecond),
 			true,
 		},
 		{
@@ -327,12 +353,12 @@ func TestNode_reconnect(t *testing.T) {
 		},
 		{
 			"No reconnect",
-			newNode(testDBDriver, testDSN, 1000, 22, 0),
+			newNode(defaultTestConfig(), testDSN, 1000, 22, 0),
 			false,
 		},
 		{
 			"Loop", // Will always fail
-			newNode("boogie", "woogie", 1000, 22, 5*time.Millisecond),
+			newNode(testConfig{dn: "foo"}, "woogie", 1000, 22, 5*time.Millisecond),
 			false,
 		},
 	}
@@ -383,7 +409,7 @@ func TestNode_Reconnecting(t *testing.T) {
 }
 
 func TestNode_InUse(t *testing.T) {
-	n := newNode(testDBDriver, testDSN, 1000, 22, 0)
+	n := newNode(defaultTestConfig(), testDSN, 1000, 22, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +427,7 @@ func TestNode_InUse(t *testing.T) {
 }
 
 func TestNode_Err(t *testing.T) {
-	n := newNode(testDBDriver, testDSN, 1000, 22, 0)
+	n := newNode(defaultTestConfig(), testDSN, 1000, 22, 0)
 	n.setErr(errors.New(ErrAlreadyOpen))
 	err := n.ConnErr()
 	if err == nil || err.Error() != ErrAlreadyOpen {
@@ -413,7 +439,7 @@ func TestNode_Err(t *testing.T) {
 }
 
 func TestNode_checkFailed(t *testing.T) {
-	n := newNode(testDBDriver, testDSN, 10, 5, 0)
+	n := newNode(defaultTestConfig(), testDSN, 10, 5, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(n)
 	}
@@ -429,7 +455,7 @@ func TestNode_checkFailed(t *testing.T) {
 }
 
 func TestNode_CheckErr(t *testing.T) {
-	n := newNode(testDBDriver, testDSN, 10, 1, 0)
+	n := newNode(defaultTestConfig(), testDSN, 10, 1, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(n)
 	}
@@ -491,7 +517,7 @@ func TestNode_CheckErr(t *testing.T) {
 }
 
 func TestNode_Exec(t *testing.T) {
-	n := newNode(testDBDriver, testDSN, 10, 0, 0)
+	n := newNode(defaultTestConfig(), testDSN, 10, 0, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -509,7 +535,7 @@ func TestNode_Exec(t *testing.T) {
 }
 
 func TestNode_Query(t *testing.T) {
-	n := newNode(testDBDriver, testDSN, 10, 0, 0)
+	n := newNode(defaultTestConfig(), testDSN, 10, 0, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -532,7 +558,7 @@ func TestNode_Query(t *testing.T) {
 }
 
 func TestNode_QueryRow(t *testing.T) {
-	n := newNode(testDBDriver, testDSN, 10, 0, 0)
+	n := newNode(defaultTestConfig(), testDSN, 10, 0, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -551,7 +577,7 @@ func TestNode_QueryRow(t *testing.T) {
 }
 
 func TestNode_ExecContext(t *testing.T) {
-	n := newNode(testDBDriver, testDSN, 10, 0, 0)
+	n := newNode(defaultTestConfig(), testDSN, 10, 0, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -569,7 +595,7 @@ func TestNode_ExecContext(t *testing.T) {
 }
 
 func TestNode_QueryContext(t *testing.T) {
-	n := newNode(testDBDriver, testDSN, 10, 0, 0)
+	n := newNode(defaultTestConfig(), testDSN, 10, 0, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -592,7 +618,7 @@ func TestNode_QueryContext(t *testing.T) {
 }
 
 func TestNode_QueryRowContext(t *testing.T) {
-	n := newNode(testDBDriver, testDSN, 10, 0, 0)
+	n := newNode(defaultTestConfig(), testDSN, 10, 0, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -611,7 +637,7 @@ func TestNode_QueryRowContext(t *testing.T) {
 }
 
 func TestNode_Begin(t *testing.T) {
-	n := newNode(testDBDriver, testDSN, 10, 0, 0)
+	n := newNode(defaultTestConfig(), testDSN, 10, 0, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -628,7 +654,7 @@ func TestNode_Begin(t *testing.T) {
 }
 
 func TestNode_BeginTx(t *testing.T) {
-	n := newNode(testDBDriver, testDSN, 10, 0, 0)
+	n := newNode(defaultTestConfig(), testDSN, 10, 0, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -736,7 +762,7 @@ func Test_availableNodes(t *testing.T) {
 	exp := make([]*Node, 10)
 	arg := make([]*Node, 10)
 	for i := 0; i < 10; i++ {
-		n := newNode(testDBDriver, testDSN, 10, 0, 0)
+		n := newNode(defaultTestConfig(), testDSN, 10, 0, 0)
 		if err := n.Open(); err != nil {
 			t.Fatal(err)
 		}

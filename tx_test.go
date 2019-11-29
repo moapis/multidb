@@ -15,7 +15,7 @@ func _() boil.Transactor        { return &Tx{} }
 func _() boil.ContextTransactor { return &Tx{} }
 
 func beginTestTx() (*Tx, error) {
-	n := newNode(testDBDriver, testDSN, 10, 0, 0)
+	n := newNode(defaultTestConfig(), testDSN, 10, 0, 0)
 	if err := n.Open(); err != nil {
 		return nil, err
 	}

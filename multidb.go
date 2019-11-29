@@ -45,10 +45,9 @@ type Config struct {
 
 // MultiDB holds the multiple DB objects, capable of Writing and Reading.
 type MultiDB struct {
-	masterQuery func() string
-	master      *Node
-	all         []*Node
-	mtx         sync.RWMutex // Protection for reconfiguration
+	master *Node
+	all    []*Node
+	mtx    sync.RWMutex // Protection for reconfiguration
 }
 
 // Open all the configured DB hosts.
@@ -59,18 +58,14 @@ type MultiDB struct {
 // failing Nodes will enter into a reconnection sequence
 // and may become available after some time.
 func (c Config) Open() (*MultiDB, error) {
-	driverName := c.DBConf.DriverName()
 	dataSourceNames := c.DBConf.DataSourceNames()
-
-	if len(dataSourceNames) == 0 {
+	mdb := &MultiDB{all: make([]*Node, len(dataSourceNames))}
+	if len(mdb.all) == 0 {
 		return nil, errors.New(ErrNoNodes)
 	}
 
-	mdb := &MultiDB{masterQuery: c.DBConf.MasterQuery}
-	mdb.all = make([]*Node, len(dataSourceNames))
-
 	for i, dsn := range dataSourceNames {
-		mdb.all[i] = newNode(driverName, dsn, c.StatsLen, c.MaxFails, c.ReconnectWait)
+		mdb.all[i] = newNode(c.DBConf, dsn, c.StatsLen, c.MaxFails, c.ReconnectWait)
 		if err := mdb.all[i].Open(); err != nil {
 			go mdb.all[i].reconnect(context.TODO())
 		}
@@ -96,7 +91,7 @@ func (mdb *MultiDB) Close() error {
 	return me.check()
 }
 
-func electMaster(ctx context.Context, nodes []*Node, masterQuery string) *Node {
+func electMaster(ctx context.Context, nodes []*Node) *Node {
 	type result struct {
 		node     *Node
 		isMaster bool
@@ -112,7 +107,7 @@ func electMaster(ctx context.Context, nodes []*Node, masterQuery string) *Node {
 				rc <- res
 				return
 			}
-			if err := n.QueryRowContext(ctx, masterQuery).Scan(&res.isMaster); err != nil {
+			if err := n.QueryRowContext(ctx, n.MasterQuery()).Scan(&res.isMaster); err != nil {
 				n.CheckErr(err) // Should be removed when QueryRowContext becomes error aware
 			}
 			rc <- res
@@ -137,7 +132,7 @@ func (mdb *MultiDB) setMaster(ctx context.Context) (*Node, error) {
 	case 1:
 		mdb.master = mdb.all[0]
 	default:
-		mdb.master = electMaster(ctx, mdb.all, mdb.masterQuery())
+		mdb.master = electMaster(ctx, mdb.all)
 	}
 	if mdb.master == nil {
 		return nil, errors.New(ErrNoMaster)

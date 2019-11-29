@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/moapis/multidb/drivers"
 	"sort"
 	"sync"
 	"time"
@@ -68,7 +69,7 @@ func (s *nodeStats) failed(state bool) bool {
 // Node represents a database server connection
 type Node struct {
 	nodeStats
-	driverName     string
+	drivers.Configurator
 	dataSourceName string
 	db             *sql.DB
 	connErr        error
@@ -77,11 +78,11 @@ type Node struct {
 	mtx            sync.RWMutex
 }
 
-func newNode(driverName, dataSourceName string, statsLen, maxFails int, reconnectWait time.Duration) *Node {
+func newNode(conf drivers.Configurator, dsn string, statsLen, maxFails int, reconnectWait time.Duration) *Node {
 	return &Node{
 		nodeStats:      newNodeStats(statsLen, maxFails),
-		driverName:     driverName,
-		dataSourceName: dataSourceName,
+		Configurator:   conf,
+		dataSourceName: dsn,
 		reconnectWait:  reconnectWait,
 	}
 }
@@ -96,7 +97,7 @@ func (n *Node) Open() error {
 		return errors.New(ErrAlreadyOpen)
 	}
 
-	n.db, n.connErr = sql.Open(n.driverName, n.dataSourceName)
+	n.db, n.connErr = sql.Open(n.DriverName(), n.dataSourceName)
 	n.reset()
 
 	return n.connErr

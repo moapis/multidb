@@ -15,23 +15,6 @@ import (
 	"github.com/moapis/multidb/drivers"
 )
 
-// testConfig implements a naive drivers.Configurator
-type testConfig struct {
-	dn   string
-	dsns []string
-}
-
-func (c testConfig) DriverName() string {
-	return c.dn
-}
-func (c testConfig) DataSourceNames() []string {
-	return c.dsns
-}
-
-func (c testConfig) MasterQuery() string {
-	return "select true;"
-}
-
 func TestConfig_Open(t *testing.T) {
 	type fields struct {
 		DBConf        drivers.Configurator
@@ -117,10 +100,10 @@ func TestConfig_Open(t *testing.T) {
 			}
 			time.Sleep(time.Millisecond) // Give some time for the recovery go routine to kick in
 			for _, n := range got.all {
-				if (n.driverName == "nil") != (n.db == nil) {
-					t.Errorf("Config.Open() = %v, want %v", n.db, n.driverName)
+				if (n.DriverName() == "nil") != (n.db == nil) {
+					t.Errorf("Config.Open() = %v, want %v", n.db, n.DriverName())
 				}
-				if n.driverName == "nil" && !n.Reconnecting() {
+				if n.DriverName() == "nil" && !n.Reconnecting() {
 					t.Errorf("Config.Open() Reconnecting = %v, want %v", n.Reconnecting(), true)
 				}
 			}
@@ -156,7 +139,8 @@ func Test_electMaster(t *testing.T) {
 		}
 		mocks[k] = mock
 		node := &Node{
-			db: db,
+			Configurator: defaultTestConfig(),
+			db:           db,
 			nodeStats: nodeStats{
 				maxFails: -1,
 			},
@@ -168,28 +152,29 @@ func Test_electMaster(t *testing.T) {
 	}
 	nodes = append(nodes, nil)
 
-	mocks["master"].ExpectQuery(testQuery).WillDelayFor(100 * time.Millisecond).WillReturnRows(sm.NewRows([]string{"master"}).AddRow(true))
-	mocks["slave"].ExpectQuery(testQuery).WillDelayFor(50 * time.Millisecond).WillReturnRows(sm.NewRows([]string{"master"}).AddRow(false))
-	mocks["borked"].ExpectQuery(testQuery).WillDelayFor(time.Second)
-	mocks["errored"].ExpectQuery(testQuery).WillReturnError(sql.ErrConnDone)
+	q := defaultTestConfig().MasterQuery()
+	mocks["master"].ExpectQuery(q).WillDelayFor(100 * time.Millisecond).WillReturnRows(sm.NewRows([]string{"master"}).AddRow(true))
+	mocks["slave"].ExpectQuery(q).WillDelayFor(50 * time.Millisecond).WillReturnRows(sm.NewRows([]string{"master"}).AddRow(false))
+	mocks["borked"].ExpectQuery(q).WillDelayFor(time.Second)
+	mocks["errored"].ExpectQuery(q).WillReturnError(sql.ErrConnDone)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	got := electMaster(ctx, nodes, testQuery)
+	got := electMaster(ctx, nodes)
 	if !reflect.DeepEqual(exp, got) {
 		t.Errorf("electMaster() = %v, want %v", got, exp)
 	}
 
 	delete(mocks, "master")
 	exp = nil
-	got = electMaster(ctx, nodes, testQuery)
+	got = electMaster(ctx, nodes)
 	if !reflect.DeepEqual(exp, got) {
 		t.Errorf("electMaster() = %v, want %v", got, exp)
 	}
 
 	exp = nil
-	got = electMaster(ctx, nil, testQuery)
+	got = electMaster(ctx, nil)
 	if !reflect.DeepEqual(exp, got) {
 		t.Errorf("electMaster() = %v, want %v", got, exp)
 	}
