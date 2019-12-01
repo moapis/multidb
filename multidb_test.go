@@ -103,8 +103,8 @@ func TestConfig_Open(t *testing.T) {
 			}
 			time.Sleep(time.Millisecond) // Give some time for the recovery go routine to kick in
 			for _, n := range got.all {
-				if (n.DriverName() == "nil") != (n.db == nil) {
-					t.Errorf("Config.Open() = %v, want %v", n.db, n.DriverName())
+				if (n.DriverName() == "nil") != (n.DB == nil) {
+					t.Errorf("Config.Open() = %v, want %v", n.DB, n.DriverName())
 				}
 				if n.DriverName() == "nil" && !n.Reconnecting() {
 					t.Errorf("Config.Open() Reconnecting = %v, want %v", n.Reconnecting(), true)
@@ -233,7 +233,7 @@ func Test_electMaster(t *testing.T) {
 		mocks[k] = mock
 		node := &Node{
 			Configurator: defaultTestConfig(),
-			db:           db,
+			DB:           db,
 			nodeStats: nodeStats{
 				maxFails: -1,
 			},

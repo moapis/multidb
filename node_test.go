@@ -386,8 +386,8 @@ func TestNode_reconnect(t *testing.T) {
 				}()
 			}
 			tt.node.reconnect(ctx)
-			if (tt.node.db != nil) != tt.wantDB {
-				t.Errorf("Node.Open() DB = %v, wantDB %v", tt.node.db, tt.wantDB)
+			if (tt.node.DB != nil) != tt.wantDB {
+				t.Errorf("Node.Open() DB = %v, wantDB %v", tt.node.DB, tt.wantDB)
 			}
 		})
 	}
@@ -455,13 +455,13 @@ func TestNode_checkFailed(t *testing.T) {
 		t.Fatal(n)
 	}
 	for i := 0; i < 6; i++ {
-		if n.db == nil {
-			t.Errorf("Node.checkFailed() DB = %v, want %v", n.db, "DB")
+		if n.DB == nil {
+			t.Errorf("Node.checkFailed() DB = %v, want %v", n.DB, "DB")
 		}
 		n.checkFailed(true)
 	}
-	if n.db != nil {
-		t.Errorf("Node.checkFailed() DB = %v, want %v", n.db, nil)
+	if n.DB != nil {
+		t.Errorf("Node.checkFailed() DB = %v, want %v", n.DB, nil)
 	}
 }
 
@@ -489,8 +489,8 @@ func TestNode_CheckErr(t *testing.T) {
 		if n.connErr != nil {
 			t.Errorf("Node.CheckErr() connErr = %v, want %v", n.connErr, nil)
 		}
-		if n.db == nil {
-			t.Errorf("Node.CheckErr() DB = %v, want %v", n.db, "DB")
+		if n.DB == nil {
+			t.Errorf("Node.CheckErr() DB = %v, want %v", n.DB, "DB")
 		}
 		n.mtx.RUnlock()
 	}
@@ -506,8 +506,8 @@ func TestNode_CheckErr(t *testing.T) {
 	if n.connErr != sql.ErrConnDone {
 		t.Errorf("Node.CheckErr() connErr = %v, want %v", n.connErr, sql.ErrConnDone)
 	}
-	if n.db == nil {
-		t.Errorf("Node.CheckErr() DB = %v, want %v", n.db, "DB")
+	if n.DB == nil {
+		t.Errorf("Node.CheckErr() DB = %v, want %v", n.DB, "DB")
 	}
 	n.mtx.RUnlock()
 
@@ -522,8 +522,8 @@ func TestNode_CheckErr(t *testing.T) {
 	if n.connErr != sql.ErrConnDone {
 		t.Errorf("Node.CheckErr() connErr = %v, want %v", n.connErr, sql.ErrConnDone)
 	}
-	if n.db != nil {
-		t.Errorf("Node.CheckErr() DB = %v, want %v", n.db, nil)
+	if n.DB != nil {
+		t.Errorf("Node.CheckErr() DB = %v, want %v", n.DB, nil)
 	}
 	n.mtx.RUnlock()
 }
@@ -708,12 +708,12 @@ func Test_newEntries(t *testing.T) {
 				mu.RUnlock()
 			}()
 		}
-		node := &Node{db: db}
+		node := &Node{DB: db}
 		exp = append(exp, entry{
 			node,
 			float32(i) / 10.0,
 		})
-		nodes = append(nodes, node, nil, &Node{db: nil}) // nil to add some garbage
+		nodes = append(nodes, node, nil, &Node{DB: nil}) // nil to add some garbage
 	}
 	wg.Wait() // Allow for the exec go-routines to fire.
 	got := newEntries(nodes)

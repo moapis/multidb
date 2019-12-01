@@ -120,7 +120,7 @@ func electMaster(ctx context.Context, nodes []*Node) (*Node, error) {
 	}
 	var available []*Node
 	for _, n := range nodes {
-		if n != nil && n.db != nil {
+		if n != nil && n.DB != nil {
 			available = append(available, n)
 		}
 	}

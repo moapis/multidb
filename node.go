@@ -71,11 +71,13 @@ type Node struct {
 	nodeStats
 	drivers.Configurator
 	dataSourceName string
-	db             *sql.DB
-	connErr        error
-	reconnectWait  time.Duration
-	reconnecting   bool
-	mtx            sync.RWMutex
+	// DB holds the raw *sql.DB for direct access.
+	// Errors produced by calling DB directly are not monitored by this package.
+	DB            *sql.DB
+	connErr       error
+	reconnectWait time.Duration
+	reconnecting  bool
+	mtx           sync.RWMutex
 }
 
 func newNode(conf drivers.Configurator, dsn string, statsLen, maxFails int, reconnectWait time.Duration) *Node {
@@ -93,11 +95,11 @@ func (n *Node) Open() error {
 	n.mtx.Lock()
 	defer n.mtx.Unlock()
 
-	if n.db != nil {
+	if n.DB != nil {
 		return errors.New(ErrAlreadyOpen)
 	}
 
-	n.db, n.connErr = sql.Open(n.DriverName(), n.dataSourceName)
+	n.DB, n.connErr = sql.Open(n.DriverName(), n.dataSourceName)
 	n.reset()
 
 	return n.connErr
@@ -109,15 +111,15 @@ func (n *Node) Close() error {
 	defer n.mtx.Unlock()
 
 	var err error
-	if n.db == nil {
+	if n.DB == nil {
 		err = sql.ErrConnDone
 	} else {
-		err = n.db.Close()
+		err = n.DB.Close()
 	}
 	if err != nil {
 		n.connErr = err
 	}
-	n.db = nil
+	n.DB = nil
 	return err
 }
 
@@ -157,10 +159,10 @@ func (n *Node) InUse() int {
 	n.mtx.RLock()
 	defer n.mtx.RUnlock()
 
-	if n.db == nil {
+	if n.DB == nil {
 		return -1
 	}
-	return n.db.Stats().InUse
+	return n.DB.Stats().InUse
 }
 
 func (n *Node) setErr(err error) {
@@ -212,7 +214,7 @@ func (n *Node) CheckErr(err error) error {
 // Implements boil.ContextExecutor
 func (n *Node) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	n.mtx.RLock()
-	res, err := n.db.ExecContext(ctx, query, args...)
+	res, err := n.DB.ExecContext(ctx, query, args...)
 	n.mtx.RUnlock()
 
 	return res, n.CheckErr(err)
@@ -228,7 +230,7 @@ func (n *Node) Exec(query string, args ...interface{}) (sql.Result, error) {
 // Implements boil.ContextExecutor
 func (n *Node) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	n.mtx.RLock()
-	rows, err := n.db.QueryContext(ctx, query, args...)
+	rows, err := n.DB.QueryContext(ctx, query, args...)
 	n.mtx.RUnlock()
 
 	return rows, n.CheckErr(err)
@@ -248,7 +250,7 @@ func (n *Node) Query(query string, args ...interface{}) (*sql.Rows, error) {
 // Since errors are deferred until row.Scan, this package cannot monitor such errors.
 func (n *Node) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	n.mtx.RLock()
-	row := n.db.QueryRowContext(ctx, query, args...)
+	row := n.DB.QueryRowContext(ctx, query, args...)
 	n.mtx.RUnlock()
 
 	return row
@@ -267,7 +269,7 @@ func (n *Node) QueryRow(query string, args ...interface{}) *sql.Row {
 // BeginTx opens a new *sql.Tx inside a Tx.
 func (n *Node) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 	n.mtx.RLock()
-	tx, err := n.db.BeginTx(ctx, opts)
+	tx, err := n.DB.BeginTx(ctx, opts)
 	n.mtx.RUnlock()
 
 	return &Tx{n, tx}, n.CheckErr(err)
@@ -294,8 +296,8 @@ func (ent entries) Swap(i, j int)      { ent[i], ent[j] = ent[j], ent[i] }
 func newEntries(nodes []*Node) entries {
 	var ent entries
 	for _, n := range nodes {
-		if n != nil && n.db != nil {
-			st := n.db.Stats()
+		if n != nil && n.DB != nil {
+			st := n.DB.Stats()
 			ent = append(ent, entry{
 				node:   n,
 				factor: float32(st.InUse) / float32(st.MaxOpenConnections),
