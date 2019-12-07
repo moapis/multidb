@@ -18,8 +18,10 @@ func _() drivers.Configurator { return Config{} }
 
 func Test_connString(t *testing.T) {
 	type args struct {
-		host   Host
-		params map[string]string
+		Foo   string
+		Bar   uint16
+		Hello float32
+		World int
 	}
 	tests := []struct {
 		name string
@@ -27,64 +29,32 @@ func Test_connString(t *testing.T) {
 		want string
 	}{
 		{
-			name: "Empty",
+			"All zero",
+			args{},
+			"",
 		},
 		{
-			name: "Host",
-			args: args{
-				host: Host{
-					Addr: "localhost",
-				},
+			"Some zero",
+			args{
+				Foo:   "bAr",
+				Hello: 32.1,
 			},
-			want: "host=localhost",
+			"foo=bAr hello=32.1",
 		},
 		{
-			name: "Host, port",
-			args: args{
-				host: Host{
-					Addr: "localhost",
-					Port: 22,
-				},
+			"All used",
+			args{
+				Foo:   "bAr",
+				Bar:   16,
+				Hello: 32.1,
+				World: 777,
 			},
-			want: "host=localhost port=22",
-		},
-		{
-			name: "Single param",
-			args: args{
-				params: map[string]string{
-					"foo": "bar",
-				},
-			},
-			want: "foo=bar",
-		},
-		{
-			name: "Multi param",
-			args: args{
-				params: map[string]string{
-					"foo":   "bar",
-					"hello": "world",
-				},
-			},
-			want: "foo=bar hello=world",
-		},
-		{
-			name: "Full conf",
-			args: args{
-				host: Host{
-					Addr: "localhost",
-					Port: 22,
-				},
-				params: map[string]string{
-					"foo":   "bar",
-					"hello": "world",
-				},
-			},
-			want: "host=localhost port=22 foo=bar hello=world",
+			"foo=bAr bar=16 hello=32.1 world=777",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := connString(tt.args.host, tt.args.params); got != tt.want {
+			if got := connString(tt.args); got != tt.want {
 				t.Errorf("connString() = %v, want %v", got, tt.want)
 			}
 		})
@@ -93,8 +63,8 @@ func Test_connString(t *testing.T) {
 
 func TestConfig_DataSourceNames(t *testing.T) {
 	type fields struct {
-		Hosts  []Host
-		Params map[string]string
+		Nodes  []Node
+		Params Params
 	}
 	tests := []struct {
 		name     string
@@ -104,54 +74,54 @@ func TestConfig_DataSourceNames(t *testing.T) {
 		{
 			name: "Single host",
 			fields: fields{
-				Hosts: []Host{
+				Nodes: []Node{
 					{
-						Addr: "localhost",
+						Host: "localhost",
 						Port: 22,
 					},
 				},
-				Params: map[string]string{
-					"foo":   "bar",
-					"hello": "world",
+				Params: Params{
+					DBname: "bar",
+					User:   "world",
 				},
 			},
 			wantSnds: []string{
-				"host=localhost port=22 foo=bar hello=world",
+				"host=localhost port=22 dbname=bar user=world",
 			},
 		},
 		{
 			name: "Multi host",
 			fields: fields{
-				Hosts: []Host{
+				Nodes: []Node{
 					{
-						Addr: "mercury",
+						Host: "mercury",
 						Port: 111,
 					},
 					{
-						Addr: "venus",
+						Host: "venus",
 						Port: 222,
 					},
 					{
-						Addr: "earth",
+						Host: "earth",
 						Port: 333,
 					},
 				},
-				Params: map[string]string{
-					"foo":   "bar",
-					"hello": "world",
+				Params: Params{
+					DBname: "bar",
+					User:   "world",
 				},
 			},
 			wantSnds: []string{
-				"host=mercury port=111 foo=bar hello=world",
-				"host=venus port=222 foo=bar hello=world",
-				"host=earth port=333 foo=bar hello=world",
+				"host=mercury port=111 dbname=bar user=world",
+				"host=venus port=222 dbname=bar user=world",
+				"host=earth port=333 dbname=bar user=world",
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := Config{
-				Hosts:  tt.fields.Hosts,
+				Nodes:  tt.fields.Nodes,
 				Params: tt.fields.Params,
 			}
 			if gotSnds := c.DataSourceNames(); !reflect.DeepEqual(gotSnds, tt.wantSnds) {

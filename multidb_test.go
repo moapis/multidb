@@ -117,26 +117,26 @@ func TestConfig_Open(t *testing.T) {
 func Example() {
 	c := Config{
 		DBConf: postgresql.Config{
-			Hosts: []postgresql.Host{
+			Nodes: []postgresql.Node{
 				{
-					Addr: "db1.example.com",
+					Host: "db1.example.com",
 					Port: 5432,
 				},
 				{
-					Addr: "db2.example.com",
+					Host: "db2.example.com",
 					Port: 5432,
 				},
 				{
-					Addr: "db3.example.com",
+					Host: "db3.example.com",
 					Port: 5432,
 				},
 			},
-			Params: map[string]string{
-				"dbname":          "multidb",
-				"user":            "postgres",
-				"password":        "",
-				"sslmode":         "disable",
-				"connect_timeout": "30",
+			Params: postgresql.Params{
+				DBname:          "multidb",
+				User:            "postgres",
+				Password:        "",
+				SSLmode:         postgresql.SSLDisable,
+				Connect_timeout: 30,
 			},
 		},
 		StatsLen:      100,

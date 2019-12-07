@@ -6,62 +6,84 @@ package postgresql
 
 import (
 	"fmt"
-	"sort"
+	"reflect"
 	"strings"
 
 	"github.com/lib/pq"
 )
 
-// connString build the connection string for host with params
-func connString(host Host, params map[string]string) string {
-	parts := make([]string, 0, len(params)+2)
-	if host.Addr != "" {
-		parts = append(parts, fmt.Sprintf("host=%s", host.Addr))
-	}
-	if host.Port != 0 {
-		parts = append(parts, fmt.Sprintf("port=%d", host.Port))
-	}
-	// Sorting of map needed for unit tests
-	// Also, filters out empty entries
-	keys := make([]string, 0, len(params))
-	for k, v := range params {
-		if v != "" {
-			keys = append(keys, k)
+// Node holds the address and port information for a single DB Node
+type Node struct {
+	Host string // The host to connect to. Values that start with / are for unix domain sockets. (default is localhost)
+	Port uint16 // The port to bind to. (default is 5432)
+}
+
+// SSLMode used for connection
+type SSLMode string
+
+const (
+	// SSLDisable means: No SSL
+	SSLDisable SSLMode = "disable"
+	// SSLRequire means: Always SSL
+	// (skip verification)
+	SSLRequire SSLMode = "require"
+	// SSLVerifyCA means: Always SSL
+	// (verify that the certificate presented by the server was signed by a trusted CA)
+	SSLVerifyCA SSLMode = "verify-ca"
+	// SSLVerifyFull means: Always SSL
+	// (verify that the certification presented by the server was signed by a trusted CA
+	// and the server host name matches the one in the certificate)
+	SSLVerifyFull SSLMode = "verify-full"
+)
+
+// Params holds all remaining pq settings, as defined at https://godoc.org/github.com/lib/pq#hdr-Connection_String_Parameters
+type Params struct {
+	DBname                    string  `json:"dbname,omitempty"`                    // The name of the database to connect to
+	User                      string  `json:"user,omitempty"`                      // The user to sign in as
+	Password                  string  `json:"password,omitempty"`                  // The user's password
+	SSLmode                   SSLMode `json:"sslmode,omitempty"`                   // Whether or not to use SSL (default is require, this is not the default for libpq)
+	Fallback_application_name string  `json:"fallback_application_name,omitempty"` // An application_name to fall back to if one isn't provided.
+	Connect_timeout           uint    `json:"connect_timeout,omitempty"`           // Maximum wait for connection, in seconds. Zero or not specified means wait indefinitely.
+	SSLcert                   string  `json:"sslcert,omitempty"`                   // Cert file location. The file must contain PEM encoded data.
+	SSLkey                    string  `json:"sslkey,omitempty"`                    // Key file location. The file must contain PEM encoded data.
+	SSLrootcert               string  `json:"sslrootcert,omitempty"`               // The location of the root certificate file. The file must contain PEM encoded data.
+}
+
+func connString(d interface{}) string {
+	v := reflect.ValueOf(d)
+	t := v.Type()
+
+	var str []string
+	for i := 0; i < v.NumField(); i++ {
+		if !v.Field(i).IsZero() {
+			str = append(str,
+				strings.Join([]string{
+					strings.ToLower(t.Field(i).Name),
+					fmt.Sprint(v.Field(i).Interface()),
+				}, "="),
+			)
 		}
 	}
-	sort.Strings(keys)
-
-	for _, key := range keys {
-		parts = append(parts, fmt.Sprintf("%s=%s", key, params[key]))
-	}
-	return strings.Join(parts, " ")
+	return strings.Join(str, " ")
 }
 
-// Host network information
-type Host struct {
-	// IP address, hostname or socket location
-	Addr string
-	// TCP port
-	Port uint16
-}
-
-// Config for postgreSQL drivers
+// Config for postgreSQL drivers. Multiple Nodes will use the same set of params.
 type Config struct {
-	Hosts []Host
-	// Params are parsed as `k=v` and appended to the connection string
-	Params map[string]string
+	Nodes  []Node
+	Params Params
 }
 
 // DataSourceNames implements driver.Configurator
-func (c Config) DataSourceNames() (snds []string) {
-	for _, host := range c.Hosts {
-		snds = append(snds, connString(host, c.Params))
+func (c Config) DataSourceNames() (dsns []string) {
+	ps := connString(c.Params)
+	for _, n := range c.Nodes {
+		dsns = append(dsns, strings.Join([]string{connString(n), ps}, " "))
 	}
 	return
 }
 
 const (
-	// DriverName for postgres drivers
+	// DriverName for postgres driver
 	DriverName = "postgres"
 	// MasterQuery returns true when not in recovery (means node is master)
 	MasterQuery = "select not pg_is_in_recovery();"
