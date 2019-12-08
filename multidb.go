@@ -47,10 +47,10 @@ const (
 
 // Config configures multiple databas servers
 type Config struct {
-	DBConf drivers.Configurator
+	DBConf drivers.Configurator `json:"dbconf,omitempty"`
 
 	// Amount of past connections to consider when establishing the failure rate.
-	StatsLen int
+	StatsLen int `json:"statslen,omitempty"`
 	// Amount of allowed counted failures, after which the DB connector will be closed.
 	// Note that Go's SQL connectors are actually connection pools.
 	// Individual connections are already reset upon connection errors by the sql library.
@@ -58,11 +58,11 @@ type Config struct {
 	// 0 disconnects on the first error. (Probably not what you want)
 	// A value >= StatsLen means 100% failure rate allowed.
 	// Negative values disables autoclosing statistics / counting.
-	MaxFails int
+	MaxFails int `json:"maxfails"`
 	// Time to wait before attempting to reconnect failed nodes.
 	// Attempts will be done indefinitely.
 	// Set to 0 to disable reconnects.
-	ReconnectWait time.Duration
+	ReconnectWait time.Duration `json:"reconnectwait"`
 }
 
 // MultiDB holds the multiple DB objects, capable of Writing and Reading.

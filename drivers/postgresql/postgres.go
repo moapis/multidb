@@ -14,8 +14,8 @@ import (
 
 // Node holds the address and port information for a single DB Node
 type Node struct {
-	Host string // The host to connect to. Values that start with / are for unix domain sockets. (default is localhost)
-	Port uint16 // The port to bind to. (default is 5432)
+	Host string `json:"host,omitempty"` // The host to connect to. Values that start with / are for unix domain sockets. (default is localhost)
+	Port uint16 `json:"port,omitempty"` // The port to bind to. (default is 5432)
 }
 
 // SSLMode used for connection
@@ -69,8 +69,8 @@ func connString(d interface{}) string {
 
 // Config for postgreSQL drivers. Multiple Nodes will use the same set of params.
 type Config struct {
-	Nodes  []Node
-	Params Params
+	Nodes  []Node `json:"nodes,omitempty"`
+	Params Params `json:"params,omitempty"`
 }
 
 // DataSourceNames implements driver.Configurator
