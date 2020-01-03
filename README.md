@@ -28,8 +28,10 @@ This makes it an excellent fit for SQLBoiler's auto-generated models.
 
 ## Maturity
 
-`Alpha` stage. The intended design is fully implemented and unit tested with the race detector.
-Actual implementations using this package still need to prove its stability and usability.
+`Beta` stage:
+ - The intended design is fully implemented and unit tested with the race detector.
+ - We are using this library in other projects and it is being tested for production
+
 
 ## Dependencies
 
