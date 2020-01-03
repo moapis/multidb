@@ -823,3 +823,34 @@ func Test_availableNodes(t *testing.T) {
 		})
 	}
 }
+
+func Test_readOnlyOpts(t *testing.T) {
+	tests := []struct {
+		name string
+		opts *sql.TxOptions
+		want *sql.TxOptions
+	}{
+		{
+			"Nil opts",
+			nil,
+			&sql.TxOptions{ReadOnly: true},
+		},
+		{
+			"ReadOnly true",
+			&sql.TxOptions{ReadOnly: true},
+			&sql.TxOptions{ReadOnly: true},
+		},
+		{
+			"Isolation level",
+			&sql.TxOptions{Isolation: sql.LevelLinearizable},
+			&sql.TxOptions{Isolation: sql.LevelLinearizable, ReadOnly: true},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := readOnlyOpts(tt.opts); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("readOnlyOpts() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

@@ -209,12 +209,13 @@ func (mdb *MultiDB) Node() (*Node, error) {
 }
 
 // NodeTx returns any node with an opened transaction.
+// The transaction is created in ReadOnly mode.
 func (mdb *MultiDB) NodeTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 	node, err := mdb.Node()
 	if err != nil {
 		return nil, err
 	}
-	return node.BeginTx(ctx, opts)
+	return node.BeginTx(ctx, readOnlyOpts(opts))
 }
 
 // All returns all Nodes, regardless of their state.

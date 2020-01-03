@@ -66,6 +66,7 @@ func (mn MultiNode) QueryRow(query string, args ...interface{}) *sql.Row {
 }
 
 // BeginTx runs sql.DB.BeginTx on the Nodes in separate Go routines.
+// The transactions are created in ReadOnly mode.
 // It waits for all the calls to return or the context to expire.
 // If you have enough nodes available, you might want to set short
 // timeout values on the context to fail fast on non-responding database hosts.
@@ -83,7 +84,7 @@ func (mn MultiNode) BeginTx(ctx context.Context, opts *sql.TxOptions) (MultiTx, 
 	ec := make(chan error, len(mn))
 	for _, n := range mn {
 		go func(n *Node) {
-			tx, err := n.BeginTx(ctx, opts)
+			tx, err := n.BeginTx(ctx, readOnlyOpts(opts))
 			switch { // Make sure only one of them is returned
 			case err != nil:
 				ec <- err

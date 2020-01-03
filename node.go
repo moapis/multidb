@@ -338,3 +338,13 @@ func availableNodes(nodes []*Node, max int) ([]*Node, error) {
 	}
 	return ent.sortAndSlice(max), nil
 }
+
+// readOnlyOpts sets TxOptions.ReadOnly to true.
+// If opts is nil, a new one will be initialized.
+func readOnlyOpts(opts *sql.TxOptions) *sql.TxOptions {
+	if opts == nil {
+		opts = new(sql.TxOptions)
+	}
+	opts.ReadOnly = true
+	return opts
+}
