@@ -190,16 +190,16 @@ func (n *Node) checkFailed(state bool) {
 
 // CheckErr updates the statistics. If the error is nil or whitelisted, success is recorded.
 // Any other case constitutes an error and failure is recorded.
-// If a the configured failure trashhold is reached, this node will we disconnected.
+// If a the configured failure treshhold is reached, this node will we disconnected.
 //
 // This method is already called by each database call method and need to be used in most cases.
-// It is exported for use in extenting libraries which need use struct embedding
+// It is exported for use in extending libraries which need use struct embedding
 // and want to overload Node methods, while still keeping statistics up-to-date.
 func (n *Node) CheckErr(err error) error {
 	switch {
 	case err == nil:
 		go n.checkFailed(false)
-	case err == sql.ErrNoRows || err == sql.ErrTxDone:
+	case errors.Is(err, sql.ErrNoRows) || errors.Is(err, sql.ErrTxDone) || errors.Is(err, context.Canceled):
 		go n.checkFailed(false)
 	case n.WhiteList(err):
 		go n.checkFailed(false)
