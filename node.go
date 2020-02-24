@@ -8,10 +8,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/moapis/multidb/drivers"
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/moapis/multidb/drivers"
 )
 
 const (

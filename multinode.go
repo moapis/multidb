@@ -79,7 +79,7 @@ func (mn MultiNode) QueryRow(query string, args ...interface{}) *sql.Row {
 // Tx will carry fewer amount of entries than requested.
 // This breaks the common `if err != nil` convention,
 // but we want to leave the descission whetter to proceed or not, up to the caller.
-func (mn MultiNode) BeginTx(ctx context.Context, opts *sql.TxOptions) (MultiTx, error) {
+func (mn MultiNode) BeginTx(ctx context.Context, opts *sql.TxOptions) (*MultiTx, error) {
 	tc := make(chan *Tx, len(mn))
 	ec := make(chan error, len(mn))
 	for _, n := range mn {
@@ -95,21 +95,24 @@ func (mn MultiNode) BeginTx(ctx context.Context, opts *sql.TxOptions) (MultiTx, 
 	}
 
 	var me MultiError
-	var mtx MultiTx
+	m := &MultiTx{tx: make([]*Tx, 0, len(mn))}
 	for i := 0; i < len(mn); i++ {
 		select {
 		case err := <-ec:
 			me.append(err)
 		case tx := <-tc:
-			mtx.append(tx)
+			m.tx = append(m.tx, tx)
 		}
 	}
-	return mtx, me.check()
+	if len(m.tx) == 0 {
+		return nil, me.check()
+	}
+	return m, me.check()
 }
 
 // Begin runs BeginTx with context.Background().
 // It is highly recommended to stick with the contexted variant in parallel executions.
 // This method is primarily included for consistency.
-func (mn MultiNode) Begin() (MultiTx, error) {
+func (mn MultiNode) Begin() (*MultiTx, error) {
 	return mn.BeginTx(context.Background(), nil)
 }

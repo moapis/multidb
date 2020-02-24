@@ -7,10 +7,8 @@ import (
 
 // MultiTx holds a slice of open transactions to multiple nodes.
 // All methods on this type run their sql.Tx variant in one Go routine per Node.
-type MultiTx []*Tx
-
-func (mtx *MultiTx) append(tx *Tx) {
-	*mtx = append(*mtx, tx)
+type MultiTx struct {
+	tx []*Tx
 }
 
 // Rollback runs sql.Tx.Rollback on the transactions in separate Go routines.
@@ -26,16 +24,16 @@ func (mtx *MultiTx) append(tx *Tx) {
 // and errors can safely be ignored.
 //
 // Implements boil.Transactor
-func (mtx MultiTx) Rollback() error {
-	ec := make(chan error, len(mtx))
-	for _, tx := range mtx {
+func (m *MultiTx) Rollback() error {
+	ec := make(chan error, len(m.tx))
+	for _, tx := range m.tx {
 		go func(tx *Tx) {
 			err := tx.Rollback()
 			ec <- err
 		}(tx)
 	}
 	var me MultiError
-	for i := 0; i < len(mtx); i++ {
+	for i := 0; i < len(m.tx); i++ {
 		if err := <-ec; err != nil {
 			me.append(err)
 		}
@@ -57,15 +55,15 @@ func (mtx MultiTx) Rollback() error {
 // you'll now have to deal with an inconsistent dataset.
 //
 // This method is primarily included to implement boil.Transactor
-func (mtx MultiTx) Commit() error {
-	ec := make(chan error, len(mtx))
-	for _, tx := range mtx {
+func (m *MultiTx) Commit() error {
+	ec := make(chan error, len(m.tx))
+	for _, tx := range m.tx {
 		go func(tx *Tx) {
 			ec <- tx.Commit()
 		}(tx)
 	}
 	var me MultiError
-	for i := 0; i < len(mtx); i++ {
+	for i := 0; i < len(m.tx); i++ {
 		if err := <-ec; err != nil {
 			me.append(err)
 		}
@@ -82,15 +80,15 @@ func (mtx MultiTx) Commit() error {
 //
 // It does not make much sense to run this method against multiple Nodes, as they are ussualy slaves.
 // This method is primarily included to implement boil.ContextExecutor.
-func (mtx MultiTx) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return multiExec(ctx, mtx2Exec(mtx), query, args...)
+func (m *MultiTx) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	return multiExec(ctx, mtx2Exec(m.tx), query, args...)
 }
 
 // Exec runs ExecContext with context.Background().
 // It is highly recommended to stick with the contexted variant in paralell executions.
 // This method is primarily included to implement boil.Executor.
-func (mtx MultiTx) Exec(query string, args ...interface{}) (sql.Result, error) {
-	return multiExec(context.Background(), mtx2Exec(mtx), query, args...)
+func (m *MultiTx) Exec(query string, args ...interface{}) (sql.Result, error) {
+	return multiExec(context.Background(), mtx2Exec(m.tx), query, args...)
 }
 
 // QueryContext runs sql.Tx.QueryContext on the tranactions in separate Go routines.
@@ -101,15 +99,15 @@ func (mtx MultiTx) Exec(query string, args ...interface{}) (sql.Result, error) {
 // If there is a variety of errors, they will be embedded in a MultiError return.
 //
 // Implements boil.ContextExecutor.
-func (mtx MultiTx) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	return multiQuery(ctx, mtx2Exec(mtx), query, args...)
+func (m *MultiTx) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	return multiQuery(ctx, mtx2Exec(m.tx), query, args...)
 }
 
 // Query runs QueryContext with context.Background().
 // It is highly recommended to stick with the contexted variant in parallel executions.
 // This method is primarily included to implement boil.Executor.
-func (mtx MultiTx) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	return multiQuery(context.Background(), mtx2Exec(mtx), query, args...)
+func (m *MultiTx) Query(query string, args ...interface{}) (*sql.Rows, error) {
+	return multiQuery(context.Background(), mtx2Exec(m.tx), query, args...)
 }
 
 // QueryRowContext runs sql.Tx.QueryRowContext on the tranactions in separate Go routines.
@@ -118,13 +116,13 @@ func (mtx MultiTx) Query(query string, args ...interface{}) (*sql.Rows, error) {
 // Errors in sql.Tx.QueryRow are deferred until scan and therefore opaque to this package.
 // If you have a choice, stick with a regular QueryContext.
 // This method is primarily included to implement boil.Executor.
-func (mtx MultiTx) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return multiQueryRow(ctx, mtx2Exec(mtx), query, args...)
+func (m *MultiTx) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	return multiQueryRow(ctx, mtx2Exec(m.tx), query, args...)
 }
 
 // QueryRow wrapper around sql.DB.QueryRow.
 // Implements boil.Executor
 // Since errors are deferred until row.Scan, this package cannot monitor such errors.
-func (mtx MultiTx) QueryRow(query string, args ...interface{}) *sql.Row {
-	return multiQueryRow(context.Background(), mtx2Exec(mtx), query, args...)
+func (m *MultiTx) QueryRow(query string, args ...interface{}) *sql.Row {
+	return multiQueryRow(context.Background(), mtx2Exec(m.tx), query, args...)
 }

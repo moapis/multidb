@@ -10,34 +10,12 @@ import (
 )
 
 // Interface implementation checks
-func _() boil.Executor          { return MultiTx{} }
-func _() boil.ContextExecutor   { return MultiTx{} }
-func _() boil.Transactor        { return MultiTx{} }
-func _() boil.ContextTransactor { return MultiTx{} }
+func _() boil.Executor          { return &MultiTx{} }
+func _() boil.ContextExecutor   { return &MultiTx{} }
+func _() boil.Transactor        { return &MultiTx{} }
+func _() boil.ContextTransactor { return &MultiTx{} }
 
-func TestMultiTx_append(t *testing.T) {
-	tests := []struct {
-		name string
-		mtx  MultiTx
-		tx   *Tx
-	}{
-		{
-			"Append",
-			nil,
-			&Tx{},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.mtx.append(tt.tx)
-			if len(tt.mtx) != 1 {
-				t.Errorf("mtx.append() len of mtx = %v, want %v", len(tt.mtx), 1)
-			}
-		})
-	}
-}
-
-func prepareTestTx() (MultiTx, []sm.Sqlmock, error) {
+func prepareTestTx() (*MultiTx, []sm.Sqlmock, error) {
 	mdb, mocks, err := multiTestConnect()
 	if err != nil {
 		return nil, nil, err

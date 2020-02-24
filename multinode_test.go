@@ -151,12 +151,12 @@ func TestMultiNode_BeginTx(t *testing.T) {
 	for _, mock := range mocks {
 		mock.ExpectBegin()
 	}
-	tx, err := mn.BeginTx(context.Background(), nil)
+	m, err := mn.BeginTx(context.Background(), nil)
 	if err != nil {
 		t.Error(err)
 	}
-	if len(tx) != 3 {
-		t.Errorf("mtx.BeginTx() len of tx = %v, want %v", len(tx), 3)
+	if len(m.tx) != 3 {
+		t.Errorf("mtx.BeginTx() len of tx = %v, want %v", len(m.tx), 3)
 	}
 
 	t.Log("Healty delayed, two error")
@@ -173,12 +173,12 @@ func TestMultiNode_BeginTx(t *testing.T) {
 			mock.ExpectBegin().WillReturnError(sql.ErrConnDone)
 		}
 	}
-	tx, err = mn.BeginTx(context.Background(), nil)
+	m, err = mn.BeginTx(context.Background(), nil)
 	if err != sql.ErrConnDone {
 		t.Errorf("mtx.BeginTx() expected err: %v, got: %v", sql.ErrConnDone, err)
 	}
-	if len(tx) != 1 {
-		t.Errorf("mtx.BeginTx() len of tx = %v, want %v", len(tx), 1)
+	if len(m.tx) != 1 {
+		t.Errorf("mtx.BeginTx() len of tx = %v, want %v", len(m.tx), 1)
 	}
 
 	t.Log("All same error")
@@ -191,12 +191,12 @@ func TestMultiNode_BeginTx(t *testing.T) {
 	for _, mock := range mocks {
 		mock.ExpectBegin().WillReturnError(sql.ErrConnDone)
 	}
-	tx, err = mn.BeginTx(context.Background(), nil)
+	m, err = mn.BeginTx(context.Background(), nil)
 	if err != sql.ErrConnDone {
 		t.Errorf("Expected err: %v, got: %v", sql.ErrConnDone, err)
 	}
-	if tx != nil {
-		t.Errorf("mtx.BeginTx() Res = %v, want %v", tx, nil)
+	if m != nil {
+		t.Errorf("mtx.BeginTx() Res = %v, want %v", m.tx, nil)
 	}
 
 	t.Log("Different errors")
@@ -213,7 +213,7 @@ func TestMultiNode_BeginTx(t *testing.T) {
 			mock.ExpectBegin().WillReturnError(sql.ErrConnDone)
 		}
 	}
-	tx, err = mn.BeginTx(context.Background(), nil)
+	m, err = mn.BeginTx(context.Background(), nil)
 	me, ok := err.(MultiError)
 	if !ok {
 		t.Errorf("mtx.BeginTx() expected err type: %T, got: %T", MultiError{}, err)
@@ -221,8 +221,8 @@ func TestMultiNode_BeginTx(t *testing.T) {
 	if len(me.Errors) != 3 {
 		t.Errorf("mtx.BeginTx() len of err = %v, want %v", len(me.Errors), 3)
 	}
-	if tx != nil {
-		t.Errorf("mtx.BeginTx() Res = %v, want %v", tx, nil)
+	if m != nil {
+		t.Errorf("mtx.BeginTx() Res = %v, want %v", m.tx, nil)
 	}
 
 	t.Log("Begin wrapper")
@@ -235,11 +235,11 @@ func TestMultiNode_BeginTx(t *testing.T) {
 	for _, mock := range mocks {
 		mock.ExpectBegin()
 	}
-	tx, err = mn.Begin()
+	m, err = mn.Begin()
 	if err != nil {
 		t.Error(err)
 	}
-	if len(tx) != 3 {
-		t.Errorf("mtx.BeginTx() len of tx = %v, want %v", len(tx), 3)
+	if len(m.tx) != 3 {
+		t.Errorf("mtx.BeginTx() len of tx = %v, want %v", len(m.tx), 3)
 	}
 }
