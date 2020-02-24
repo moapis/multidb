@@ -5,11 +5,16 @@ import (
 	"database/sql"
 )
 
+type ctxCancel struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
 // MultiTx holds a slice of open transactions to multiple nodes.
 // All methods on this type run their sql.Tx variant in one Go routine per Node.
 type MultiTx struct {
-	tx      []*Tx
-	cancels []context.CancelFunc
+	tx   []*Tx
+	ctxs []ctxCancel
 }
 
 // Rollback runs sql.Tx.Rollback on the transactions in separate Go routines.
@@ -27,8 +32,9 @@ type MultiTx struct {
 // Implements boil.Transactor
 func (m *MultiTx) Rollback() error {
 	ec := make(chan error, len(m.tx))
-	for _, cf := range m.cancels {
-		cf()
+	for _, ctx := range m.ctxs {
+		ctx.cancel()
+		<-ctx.ctx.Done()
 	}
 
 	for _, tx := range m.tx {
@@ -78,7 +84,7 @@ func (m *MultiTx) Commit() error {
 
 func (m *MultiTx) context(ctx context.Context) context.Context {
 	ctx, cancel := context.WithCancel(ctx)
-	m.cancels = append(m.cancels, cancel)
+	m.ctxs = append(m.ctxs, ctxCancel{ctx, cancel})
 	return ctx
 }
 
