@@ -187,7 +187,7 @@ func Test_multiExec(t *testing.T) {
 	for _, mock := range mocks {
 		mock.ExpectExec(testQuery).WithArgs(1).WillReturnResult(sm.NewResult(2, 3))
 	}
-	got, err := multiExec(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+	got, done, err := multiExec(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
 	if err != nil {
 		t.Error(err)
 	}
@@ -195,6 +195,8 @@ func Test_multiExec(t *testing.T) {
 	if err != nil || i != 3 {
 		t.Errorf("multiExec() Res = %v, want %v", i, 3)
 	}
+
+	<-done
 
 	t.Log("Healty delayed, two error")
 	mdb, mocks, err = multiTestConnect()
@@ -208,7 +210,7 @@ func Test_multiExec(t *testing.T) {
 			mock.ExpectExec(testQuery).WillReturnError(sql.ErrConnDone)
 		}
 	}
-	got, err = multiExec(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+	got, done, err = multiExec(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
 	if err != nil {
 		t.Error(err)
 	}
@@ -216,6 +218,8 @@ func Test_multiExec(t *testing.T) {
 	if err != nil || i != 3 {
 		t.Errorf("multiExec() Res = %v, want %v", i, 3)
 	}
+
+	<-done
 
 	t.Log("All same error")
 	mdb, mocks, err = multiTestConnect()
@@ -225,12 +229,15 @@ func Test_multiExec(t *testing.T) {
 	for _, mock := range mocks {
 		mock.ExpectExec(testQuery).WillReturnError(sql.ErrNoRows)
 	}
-	got, err = multiExec(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+	got, done, err = multiExec(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
 	if err != sql.ErrNoRows {
 		t.Errorf("exec() expected err: %v, got: %v", sql.ErrNoRows, err)
 	}
 	if got != nil {
 		t.Errorf("multiExec() Res = %v, want %v", got, nil)
+	}
+	if done != nil {
+		t.Errorf("multiExec() Done = %v, want %v", done, nil)
 	}
 
 	t.Log("Different errors")
@@ -245,7 +252,7 @@ func Test_multiExec(t *testing.T) {
 			mock.ExpectExec(testQuery).WillReturnError(sql.ErrConnDone)
 		}
 	}
-	got, err = multiExec(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+	got, done, err = multiExec(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
 	if err == nil {
 		t.Errorf("multiExec() expected err got: %v", err)
 	}
@@ -255,6 +262,9 @@ func Test_multiExec(t *testing.T) {
 	}
 	if got != nil {
 		t.Errorf("multiExec() Res = %v, want %v", got, nil)
+	}
+	if done != nil {
+		t.Errorf("multiExec() Done = %v, want %v", done, nil)
 	}
 }
 

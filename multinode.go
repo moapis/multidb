@@ -19,14 +19,16 @@ type MultiNode []*Node
 // It does not make much sense to run this method against multiple Nodes, as they are usually slaves.
 // This method is primarily included to implement boil.ContextExecutor.
 func (mn MultiNode) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return multiExec(ctx, nodes2Exec(mn), query, args...)
+	res, _, err := multiExec(ctx, nodes2Exec(mn), query, args...)
+	return res, err
 }
 
 // Exec runs ExecContext with context.Background().
 // It is highly recommended to stick with the contexted variant in parallel executions.
 // This method is primarily included to implement boil.Executor.
 func (mn MultiNode) Exec(query string, args ...interface{}) (sql.Result, error) {
-	return multiExec(context.Background(), nodes2Exec(mn), query, args...)
+	res, _, err := multiExec(context.Background(), nodes2Exec(mn), query, args...)
+	return res, err
 }
 
 // QueryContext runs sql.DB.QueryContext on the Nodes in separate Go routines.

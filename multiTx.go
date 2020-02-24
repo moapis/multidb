@@ -99,14 +99,18 @@ func (m *MultiTx) context(ctx context.Context) context.Context {
 // It does not make much sense to run this method against multiple Nodes, as they are ussualy slaves.
 // This method is primarily included to implement boil.ContextExecutor.
 func (m *MultiTx) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return multiExec(m.context(ctx), mtx2Exec(m.tx), query, args...)
+	rows, done, err := multiExec(m.context(ctx), mtx2Exec(m.tx), query, args...)
+	if done != nil {
+		m.done = append(m.done, done)
+	}
+	return rows, err
 }
 
 // Exec runs ExecContext with context.Background().
 // It is highly recommended to stick with the contexted variant in paralell executions.
 // This method is primarily included to implement boil.Executor.
 func (m *MultiTx) Exec(query string, args ...interface{}) (sql.Result, error) {
-	return multiExec(context.Background(), mtx2Exec(m.tx), query, args...)
+	return m.ExecContext(context.Background(), query, args...)
 }
 
 // QueryContext runs sql.Tx.QueryContext on the tranactions in separate Go routines.
