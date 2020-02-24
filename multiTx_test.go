@@ -3,7 +3,9 @@ package multidb
 import (
 	"context"
 	"database/sql"
+	"math/rand"
 	"testing"
+	"time"
 
 	sm "github.com/DATA-DOG/go-sqlmock"
 	"github.com/volatiletech/sqlboiler/boil"
@@ -39,7 +41,9 @@ func TestMultiTx_General(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, mock := range mocks {
-		mock.ExpectExec(testQuery).WithArgs(1).WillReturnResult(sm.NewResult(2, 3))
+		mock.ExpectExec(testQuery).WithArgs(1).
+			WillReturnResult(sm.NewResult(2, 3)).
+			WillDelayFor(time.Duration(rand.Int63n(100)) * time.Millisecond)
 		mock.ExpectRollback()
 	}
 	res, err := tx.ExecContext(context.Background(), testQuery, 1)
@@ -60,7 +64,9 @@ func TestMultiTx_General(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, mock := range mocks {
-		mock.ExpectExec(testQuery).WithArgs(1).WillReturnResult(sm.NewResult(2, 3))
+		mock.ExpectExec(testQuery).WithArgs(1).
+			WillReturnResult(sm.NewResult(2, 3)).
+			WillDelayFor(time.Duration(rand.Int63n(100)) * time.Millisecond)
 		mock.ExpectRollback()
 	}
 	res, err = tx.Exec(testQuery, 1)
@@ -83,7 +89,9 @@ func TestMultiTx_General(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, mock := range mocks {
-		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
+		mock.ExpectQuery(testQuery).WithArgs(1).
+			WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want)).
+			WillDelayFor(time.Duration(rand.Int63n(100)) * time.Millisecond)
 		mock.ExpectRollback()
 	}
 	rows, err := tx.QueryContext(context.Background(), testQuery, 1)
@@ -108,7 +116,9 @@ func TestMultiTx_General(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, mock := range mocks {
-		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
+		mock.ExpectQuery(testQuery).WithArgs(1).
+			WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want)).
+			WillDelayFor(time.Duration(rand.Int63n(100)) * time.Millisecond)
 		mock.ExpectRollback()
 	}
 	rows, err = tx.Query(testQuery, 1)
@@ -133,7 +143,9 @@ func TestMultiTx_General(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, mock := range mocks {
-		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
+		mock.ExpectQuery(testQuery).WithArgs(1).
+			WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want)).
+			WillDelayFor(time.Duration(rand.Int63n(100)) * time.Millisecond)
 		mock.ExpectRollback()
 	}
 	row := tx.QueryRowContext(context.Background(), testQuery, 1)
@@ -154,7 +166,9 @@ func TestMultiTx_General(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, mock := range mocks {
-		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
+		mock.ExpectQuery(testQuery).WithArgs(1).
+			WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want)).
+			WillDelayFor(time.Duration(rand.Int63n(100)) * time.Millisecond)
 		mock.ExpectRollback()
 	}
 	row = tx.QueryRow(testQuery, 1)
