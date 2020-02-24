@@ -718,7 +718,7 @@ func Test_newEntries(t *testing.T) {
 	wg.Wait() // Allow for the exec go-routines to fire.
 	got := newEntries(nodes)
 	if !reflect.DeepEqual(exp, got) {
-		t.Errorf("newEntries() = %v, want %v", got, exp)
+		t.Errorf("newEntries() = \n%v\nwant\n%v", got, exp)
 	}
 }
 

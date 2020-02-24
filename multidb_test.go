@@ -656,21 +656,21 @@ func TestMultiDB_MultiTx(t *testing.T) {
 	for _, mock := range mocks {
 		mock.ExpectBegin()
 	}
-	tx, err := mdb.MultiTx(context.Background(), nil, 3)
+	m, err := mdb.MultiTx(context.Background(), nil, 3)
 	if err != nil {
 		t.Error(err)
 	}
-	if len(tx) != 3 {
-		t.Errorf("mtx.BeginTx() len of tx = %v, want %v", len(tx), 3)
+	if len(m.tx) != 3 {
+		t.Errorf("mtx.BeginTx() len of tx = %v, want %v", len(m.tx), 3)
 	}
 
 	t.Log("No nodes")
 	mdb.all = nil
-	tx, err = mdb.MultiTx(context.Background(), nil, 3)
+	m, err = mdb.MultiTx(context.Background(), nil, 3)
 	if err == nil || err.Error() != ErrNoNodes {
 		t.Errorf("Expected err: %v, got: %v", sql.ErrConnDone, err)
 	}
-	if tx != nil {
-		t.Errorf("mtx.BeginTx() Res = %v, want %v", tx, nil)
+	if m != nil {
+		t.Errorf("mtx.BeginTx() Res = %v, want %v", m.tx, nil)
 	}
 }

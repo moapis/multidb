@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
 )
 
 // MultiError is a collection of errors which can arise from parallel query execution.
@@ -67,9 +68,12 @@ func mtx2Exec(mtx []*Tx) (xs []executor) {
 	return xs
 }
 
-func multiExec(ctx context.Context, xs []executor, query string, args ...interface{}) (sql.Result, error) {
+func multiExec(ctx context.Context, xs []executor, query string, args ...interface{}) (sql.Result, chan struct{}, error) {
 	rc := make(chan sql.Result, len(xs))
 	ec := make(chan error, len(xs))
+
+	var wg sync.WaitGroup
+	wg.Add(len(xs))
 	for _, x := range xs {
 		go func(x executor) {
 			res, err := x.ExecContext(ctx, query, args...)
@@ -79,24 +83,36 @@ func multiExec(ctx context.Context, xs []executor, query string, args ...interfa
 			case res != nil:
 				rc <- res
 			}
+			wg.Done()
 		}(x)
 	}
 
-	var me MultiError
-	for i := 0; i < len(xs); i++ {
-		select {
-		case err := <-ec:
-			me.append(err)
-		case res := <-rc: // Return on the first success
-			return res, nil
-		}
+	done := make(chan struct{}) // Done signals the caller that all remaining rows are properly closed
+	// Close channels when all query routines completed
+	go func() {
+		wg.Wait()
+		close(ec)
+		close(rc)
+		close(done)
+	}()
+
+	if res, ok := <-rc; ok {
+		return res, done, nil
 	}
-	return nil, me.check()
+
+	var me MultiError
+	for err := range ec {
+		me.append(err)
+	}
+	return nil, nil, me.check()
 }
 
-func multiQuery(ctx context.Context, xs []executor, query string, args ...interface{}) (*sql.Rows, error) {
-	rc := make(chan *sql.Rows, len(xs))
+func multiQuery(ctx context.Context, xs []executor, query string, args ...interface{}) (*sql.Rows, chan struct{}, error) {
+	rc := make(chan *sql.Rows)
 	ec := make(chan error, len(xs))
+
+	var wg sync.WaitGroup
+	wg.Add(len(xs))
 	for _, x := range xs {
 		go func(x executor) {
 			rows, err := x.QueryContext(ctx, query, args...)
@@ -106,27 +122,62 @@ func multiQuery(ctx context.Context, xs []executor, query string, args ...interf
 			case rows != nil:
 				rc <- rows
 			}
+			wg.Done()
 		}(x)
+	}
+
+	// Close channels when all query routines completed
+	go func() {
+		wg.Wait()
+		close(ec)
+		close(rc)
+	}()
+
+	rows, ok := <-rc
+	if ok { // ok will be false if channel closed before any rows
+		done := make(chan struct{}) // Done signals the caller that all remaining rows are properly closed
+		go func() {
+			for rows := range rc { // Drain channel and close unused Rows
+				rows.Close()
+			}
+			close(done)
+		}()
+		return rows, done, nil
 	}
 
 	var me MultiError
-	for i := 0; i < len(xs); i++ {
-		select {
-		case err := <-ec:
-			me.append(err)
-		case rows := <-rc: // Return on the first success
-			return rows, nil
-		}
+	for err := range ec {
+		me.append(err)
 	}
-	return nil, me.check()
+	return nil, nil, me.check()
 }
 
-func multiQueryRow(ctx context.Context, xs []executor, query string, args ...interface{}) *sql.Row {
-	rc := make(chan *sql.Row, len(xs))
+func multiQueryRow(ctx context.Context, xs []executor, query string, args ...interface{}) (*sql.Row, chan struct{}) {
+	rc := make(chan *sql.Row)
+
+	var wg sync.WaitGroup
+	wg.Add(len(xs))
 	for _, x := range xs {
 		go func(x executor) {
 			rc <- x.QueryRowContext(ctx, query, args...)
+			wg.Done()
 		}(x)
 	}
-	return <-rc
+
+	// Close channels when all query routines completed
+	go func() {
+		wg.Wait()
+		close(rc)
+	}()
+
+	done := make(chan struct{}) // Done signals the caller that all remaining row are properly closed
+	defer func() {
+		go func() {
+			for row := range rc { // Drain channel and close unused Row
+				row.Scan(&sql.RawBytes{}) // hack to trigger Rows.Close()
+			}
+			close(done)
+		}()
+	}()
+	return <-rc, done
 }
