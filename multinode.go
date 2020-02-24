@@ -38,14 +38,16 @@ func (mn MultiNode) Exec(query string, args ...interface{}) (sql.Result, error) 
 //
 // Implements boil.ContextExecutor.
 func (mn MultiNode) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	return multiQuery(ctx, nodes2Exec(mn), query, args...)
+	rows, _, err := multiQuery(ctx, nodes2Exec(mn), query, args...)
+	return rows, err
 }
 
 // Query runs QueryContext with context.Background().
 // It is highly recommended to stick with the contexted variant in parallel executions.
 // This method is primarily included to implement boil.Executor.
 func (mn MultiNode) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	return multiQuery(context.Background(), nodes2Exec(mn), query, args...)
+	rows, _, err := multiQuery(context.Background(), nodes2Exec(mn), query, args...)
+	return rows, err
 }
 
 // QueryRowContext runs sql.DB.QueryRowContext on the Nodes in separate Go routines.

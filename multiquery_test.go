@@ -268,7 +268,7 @@ func Test_multiQuery(t *testing.T) {
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
 	}
-	rows, err := multiQuery(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+	rows, done, err := multiQuery(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
 	if err != nil {
 		t.Error(err)
 	}
@@ -277,6 +277,8 @@ func Test_multiQuery(t *testing.T) {
 	if err = rows.Scan(&got); err != nil {
 		t.Fatal(err)
 	}
+
+	<-done
 
 	if got != want {
 		t.Errorf("multiQuery() R = %v, want %v", got, want)
@@ -294,7 +296,7 @@ func Test_multiQuery(t *testing.T) {
 			mock.ExpectQuery(testQuery).WillReturnError(sql.ErrConnDone)
 		}
 	}
-	rows, err = multiQuery(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+	rows, done, err = multiQuery(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
 	if err != nil {
 		t.Error(err)
 	}
@@ -303,6 +305,9 @@ func Test_multiQuery(t *testing.T) {
 	if err = rows.Scan(&got); err != nil {
 		t.Fatal(err)
 	}
+
+	<-done
+
 	if got != want {
 		t.Errorf("multiQuery() R = %v, want %v", got, want)
 	}
@@ -315,13 +320,15 @@ func Test_multiQuery(t *testing.T) {
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WillReturnError(sql.ErrNoRows)
 	}
-	rows, err = multiQuery(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+	rows, done, err = multiQuery(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
 	if err != sql.ErrNoRows {
 		t.Errorf("Expected err: %v, got: %v", sql.ErrNoRows, err)
 	}
 	if rows != nil {
 		t.Errorf("multiQuery() Res = %v, want %v", rows, nil)
 	}
+
+	<-done
 
 	t.Log("Different errors")
 	mdb, mocks, err = multiTestConnect()
@@ -335,7 +342,7 @@ func Test_multiQuery(t *testing.T) {
 			mock.ExpectQuery(testQuery).WillReturnError(sql.ErrConnDone)
 		}
 	}
-	rows, err = multiQuery(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+	rows, done, err = multiQuery(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
 	if err == nil {
 		t.Errorf("multiQuery() expected err got: %v", err)
 	}
@@ -346,6 +353,8 @@ func Test_multiQuery(t *testing.T) {
 	if rows != nil {
 		t.Errorf("multiQuery() Res = %v, want %v", rows, nil)
 	}
+
+	<-done
 }
 
 func Test_multiQueryRow(t *testing.T) {

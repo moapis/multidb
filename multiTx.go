@@ -9,6 +9,7 @@ import (
 // All methods on this type run their sql.Tx variant in one Go routine per Node.
 type MultiTx struct {
 	tx      []*Tx
+	done    []chan struct{}
 	cancels []context.CancelFunc
 }
 
@@ -26,11 +27,16 @@ type MultiTx struct {
 //
 // Implements boil.Transactor
 func (m *MultiTx) Rollback() error {
-	ec := make(chan error, len(m.tx))
+	// cancel all contexts passed to methods' routines
 	for _, cf := range m.cancels {
 		cf()
 	}
+	// block untill all methods' routines are done
+	for _, done := range m.done {
+		<-done
+	}
 
+	ec := make(chan error, len(m.tx))
 	for _, tx := range m.tx {
 		go func(tx *Tx) {
 			err := tx.Rollback()
@@ -111,14 +117,16 @@ func (m *MultiTx) Exec(query string, args ...interface{}) (sql.Result, error) {
 //
 // Implements boil.ContextExecutor.
 func (m *MultiTx) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	return multiQuery(m.context(ctx), mtx2Exec(m.tx), query, args...)
+	rows, done, err := multiQuery(m.context(ctx), mtx2Exec(m.tx), query, args...)
+	m.done = append(m.done, done)
+	return rows, err
 }
 
 // Query runs QueryContext with context.Background().
 // It is highly recommended to stick with the contexted variant in parallel executions.
 // This method is primarily included to implement boil.Executor.
 func (m *MultiTx) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	return multiQuery(context.Background(), mtx2Exec(m.tx), query, args...)
+	return m.QueryContext(context.Background(), query, args...)
 }
 
 // QueryRowContext runs sql.Tx.QueryRowContext on the tranactions in separate Go routines.
