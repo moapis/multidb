@@ -8,7 +8,8 @@ import (
 // MultiTx holds a slice of open transactions to multiple nodes.
 // All methods on this type run their sql.Tx variant in one Go routine per Node.
 type MultiTx struct {
-	tx []*Tx
+	tx      []*Tx
+	cancels []context.CancelFunc
 }
 
 // Rollback runs sql.Tx.Rollback on the transactions in separate Go routines.
@@ -19,13 +20,17 @@ type MultiTx struct {
 //
 // Note: this method returns an error even if some rollbacks where executed successfully.
 // It is up to the caller to decide what to do with those errors.
-// Typically MultiTx calls should only be run against a set if slave databases.
+// Typically MultiTx calls should only be run against a set of slave databases.
 // In such cases Rollback is only used in a defer to tell the hosts that we are done
 // and errors can safely be ignored.
 //
 // Implements boil.Transactor
 func (m *MultiTx) Rollback() error {
 	ec := make(chan error, len(m.tx))
+	for _, cf := range m.cancels {
+		cf()
+	}
+
 	for _, tx := range m.tx {
 		go func(tx *Tx) {
 			err := tx.Rollback()
@@ -71,6 +76,12 @@ func (m *MultiTx) Commit() error {
 	return me.check()
 }
 
+func (m *MultiTx) context(ctx context.Context) context.Context {
+	ctx, cancel := context.WithCancel(ctx)
+	m.cancels = append(m.cancels, cancel)
+	return ctx
+}
+
 // ExecContext runs sql.Tx.ExecContext on the transactions in separate Go routines.
 // The first non-error result is returned immediately
 // and errors from the other transactions will be ignored.
@@ -81,7 +92,7 @@ func (m *MultiTx) Commit() error {
 // It does not make much sense to run this method against multiple Nodes, as they are ussualy slaves.
 // This method is primarily included to implement boil.ContextExecutor.
 func (m *MultiTx) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return multiExec(ctx, mtx2Exec(m.tx), query, args...)
+	return multiExec(m.context(ctx), mtx2Exec(m.tx), query, args...)
 }
 
 // Exec runs ExecContext with context.Background().
@@ -100,7 +111,7 @@ func (m *MultiTx) Exec(query string, args ...interface{}) (sql.Result, error) {
 //
 // Implements boil.ContextExecutor.
 func (m *MultiTx) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	return multiQuery(ctx, mtx2Exec(m.tx), query, args...)
+	return multiQuery(m.context(ctx), mtx2Exec(m.tx), query, args...)
 }
 
 // Query runs QueryContext with context.Background().
@@ -117,7 +128,7 @@ func (m *MultiTx) Query(query string, args ...interface{}) (*sql.Rows, error) {
 // If you have a choice, stick with a regular QueryContext.
 // This method is primarily included to implement boil.Executor.
 func (m *MultiTx) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return multiQueryRow(ctx, mtx2Exec(m.tx), query, args...)
+	return multiQueryRow(m.context(ctx), mtx2Exec(m.tx), query, args...)
 }
 
 // QueryRow wrapper around sql.DB.QueryRow.
