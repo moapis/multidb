@@ -141,12 +141,32 @@ func multiQuery(ctx context.Context, xs []executor, query string, args ...interf
 	return nil, nil, me.check()
 }
 
-func multiQueryRow(ctx context.Context, xs []executor, query string, args ...interface{}) *sql.Row {
-	rc := make(chan *sql.Row, len(xs))
+func multiQueryRow(ctx context.Context, xs []executor, query string, args ...interface{}) (*sql.Row, chan struct{}) {
+	rc := make(chan *sql.Row)
+
+	var wg sync.WaitGroup
+	wg.Add(len(xs))
 	for _, x := range xs {
 		go func(x executor) {
 			rc <- x.QueryRowContext(ctx, query, args...)
+			wg.Done()
 		}(x)
 	}
-	return <-rc
+
+	// Signal all routines done
+	go func() {
+		wg.Wait()
+		close(rc)
+	}()
+
+	done := make(chan struct{}) // Done signals the caller that all remaining row are properly closed
+	defer func() {
+		go func() {
+			for row := range rc { // Drain channel and close unused Row
+				row.Scan(&sql.RawBytes{}) // hack to trigger Rows.Close()
+			}
+			close(done)
+		}()
+	}()
+	return <-rc, done
 }

@@ -369,7 +369,7 @@ func Test_multiQueryRow(t *testing.T) {
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
 	}
-	row := multiQueryRow(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+	row, done := multiQueryRow(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
 	var got string
 	if err = row.Scan(&got); err != nil {
 		t.Fatal(err)
@@ -377,6 +377,8 @@ func Test_multiQueryRow(t *testing.T) {
 	if got != want {
 		t.Errorf("multiQueryRow() R = %v, want %v", got, want)
 	}
+
+	<-done
 
 	t.Log("All same error")
 	mdb, mocks, err = multiTestConnect()
@@ -386,7 +388,7 @@ func Test_multiQueryRow(t *testing.T) {
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WillReturnError(sql.ErrNoRows)
 	}
-	row = multiQueryRow(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+	row, done = multiQueryRow(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
 	got = ""
 	err = row.Scan(&got)
 	if err != sql.ErrNoRows {
@@ -395,4 +397,5 @@ func Test_multiQueryRow(t *testing.T) {
 	if got != "" {
 		t.Errorf("multiQueryRow() Res = %v, want %v", got, "")
 	}
+	<-done
 }

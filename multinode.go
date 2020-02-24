@@ -57,14 +57,16 @@ func (mn MultiNode) Query(query string, args ...interface{}) (*sql.Rows, error) 
 // If you have a choice, stick with a regular QueryContext.
 // This method is primarily included to implement boil.Executor.
 func (mn MultiNode) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return multiQueryRow(ctx, nodes2Exec(mn), query, args...)
+	row, _ := multiQueryRow(ctx, nodes2Exec(mn), query, args...)
+	return row
 }
 
 // QueryRow runs QueryRowContext with context.Background().
 // It is highly recommended to stick with the contexted variant in parallel executions.
 // This method is primarily included to implement boil.Executor.
 func (mn MultiNode) QueryRow(query string, args ...interface{}) *sql.Row {
-	return multiQueryRow(context.Background(), nodes2Exec(mn), query, args...)
+	row, _ := multiQueryRow(context.Background(), nodes2Exec(mn), query, args...)
+	return row
 }
 
 // BeginTx runs sql.DB.BeginTx on the Nodes in separate Go routines.

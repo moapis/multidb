@@ -82,6 +82,7 @@ func (m *MultiTx) Commit() error {
 	return me.check()
 }
 
+// Context creates a child context and appends CancelFunc in MultiTx
 func (m *MultiTx) context(ctx context.Context) context.Context {
 	ctx, cancel := context.WithCancel(ctx)
 	m.cancels = append(m.cancels, cancel)
@@ -138,12 +139,16 @@ func (m *MultiTx) Query(query string, args ...interface{}) (*sql.Rows, error) {
 // If you have a choice, stick with a regular QueryContext.
 // This method is primarily included to implement boil.Executor.
 func (m *MultiTx) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return multiQueryRow(m.context(ctx), mtx2Exec(m.tx), query, args...)
+	row, done := multiQueryRow(m.context(ctx), mtx2Exec(m.tx), query, args...)
+	if done != nil {
+		m.done = append(m.done, done)
+	}
+	return row
 }
 
 // QueryRow wrapper around sql.DB.QueryRow.
-// Implements boil.Executor
+// Implements boil.Executor.
 // Since errors are deferred until row.Scan, this package cannot monitor such errors.
 func (m *MultiTx) QueryRow(query string, args ...interface{}) *sql.Row {
-	return multiQueryRow(context.Background(), mtx2Exec(m.tx), query, args...)
+	return m.QueryRowContext(context.Background(), query, args...)
 }
