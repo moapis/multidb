@@ -118,7 +118,9 @@ func (m *MultiTx) Exec(query string, args ...interface{}) (sql.Result, error) {
 // Implements boil.ContextExecutor.
 func (m *MultiTx) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	rows, done, err := multiQuery(m.context(ctx), mtx2Exec(m.tx), query, args...)
-	m.done = append(m.done, done)
+	if done != nil {
+		m.done = append(m.done, done)
+	}
 	return rows, err
 }
 

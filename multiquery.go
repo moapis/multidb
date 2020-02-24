@@ -97,7 +97,6 @@ func multiExec(ctx context.Context, xs []executor, query string, args ...interfa
 
 func multiQuery(ctx context.Context, xs []executor, query string, args ...interface{}) (*sql.Rows, chan struct{}, error) {
 	rc := make(chan *sql.Rows)
-	done := make(chan struct{}) // Done signals the caller that all routines finished
 	ec := make(chan error, len(xs))
 
 	var wg sync.WaitGroup
@@ -119,16 +118,17 @@ func multiQuery(ctx context.Context, xs []executor, query string, args ...interf
 	go func() {
 		wg.Wait()
 		close(ec)
-		close(done)
 		close(rc)
 	}()
 
 	rows, ok := <-rc
 	if ok { // ok will be false if channel closed before any rows
+		done := make(chan struct{}) // Done signals the caller that all remaining rows are properly closed
 		go func() {
 			for rows := range rc { // Drain channel and close unused Rows
 				rows.Close()
 			}
+			close(done)
 		}()
 		return rows, done, nil
 	}
@@ -138,7 +138,7 @@ func multiQuery(ctx context.Context, xs []executor, query string, args ...interf
 		me.append(err)
 
 	}
-	return nil, done, me.check()
+	return nil, nil, me.check()
 }
 
 func multiQueryRow(ctx context.Context, xs []executor, query string, args ...interface{}) *sql.Row {

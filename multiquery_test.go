@@ -327,8 +327,9 @@ func Test_multiQuery(t *testing.T) {
 	if rows != nil {
 		t.Errorf("multiQuery() Res = %v, want %v", rows, nil)
 	}
-
-	<-done
+	if done != nil {
+		t.Errorf("multiQuery() Done = %v, want %v", done, nil)
+	}
 
 	t.Log("Different errors")
 	mdb, mocks, err = multiTestConnect()
@@ -353,8 +354,9 @@ func Test_multiQuery(t *testing.T) {
 	if rows != nil {
 		t.Errorf("multiQuery() Res = %v, want %v", rows, nil)
 	}
-
-	<-done
+	if done != nil {
+		t.Errorf("multiQuery() Done = %v, want %v", done, nil)
+	}
 }
 
 func Test_multiQueryRow(t *testing.T) {
