@@ -18,7 +18,7 @@ import (
 
 	sm "github.com/DATA-DOG/go-sqlmock"
 	"github.com/moapis/multidb/drivers"
-	"github.com/volatiletech/sqlboiler/boil"
+	"github.com/volatiletech/sqlboiler/v4/boil"
 )
 
 const (

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	sm "github.com/DATA-DOG/go-sqlmock"
-	"github.com/volatiletech/sqlboiler/boil"
+	"github.com/volatiletech/sqlboiler/v4/boil"
 )
 
 // Interface implementation checks
