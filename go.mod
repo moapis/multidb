@@ -1,11 +1,9 @@
 module github.com/moapis/multidb
 
-go 1.13
+go 1.14
 
 require (
-	github.com/DATA-DOG/go-sqlmock v1.3.3
-	github.com/friendsofgo/errors v0.9.2 // indirect
-	github.com/lib/pq v1.2.0
-	github.com/volatiletech/inflect v0.0.0-20170731032912-e7201282ae8d // indirect
-	github.com/volatiletech/sqlboiler v3.6.1+incompatible
+	github.com/DATA-DOG/go-sqlmock v1.4.1
+	github.com/lib/pq v1.7.0
+	github.com/volatiletech/sqlboiler/v4 v4.2.0
 )
