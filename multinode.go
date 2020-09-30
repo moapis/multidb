@@ -53,11 +53,8 @@ func (mn MultiNode) Query(query string, args ...interface{}) (*sql.Rows, error) 
 }
 
 // QueryRowContext runs sql.DB.QueryRowContext on the Nodes in separate Go routines.
-// The first result is returned immediately, regardless if that result has an error.
-//
-// Errors in sql.DB.QueryRow are deferred until scan and therefore opaque to this package.
-// If you have a choice, stick with a regular QueryContext.
-// This method is primarily included to implement boil.Executor.
+// The first error free result is returned immediately.
+// If all resulting sql.Row objects contain an error, only the last Row containing an error is returned.
 func (mn MultiNode) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	row, _ := multiQueryRow(ctx, nodes2Exec(mn), query, args...)
 	return row

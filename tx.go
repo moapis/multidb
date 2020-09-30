@@ -5,62 +5,57 @@ import (
 	"database/sql"
 )
 
-// Tx is a transaction on a node
+// Tx is a transaction on a node.
+// TX implements boil.ContextTransactor and boil.ContextExecutor
 type Tx struct {
 	*Node
 	tx *sql.Tx
 }
 
 // Rollback is a wrapper around sql.Tx.Rollback.
-// Implements boil.Transactor and boil.ContextTransactor
 func (x *Tx) Rollback() error {
 	return x.CheckErr(x.tx.Rollback())
 }
 
 // Commit is a wrapper around sql.Tx.Commit.
-// Implements boil.Transactor and boil.ContextTransactor
 func (x *Tx) Commit() error {
 	return x.CheckErr(x.tx.Commit())
 }
 
-// Exec is a wrapper around sql.Tx.Exec.
-// Implements boil.Executor
+// Exec is a wrapper around sql.Tx.ExecContext,
+// using context.Background().
 func (x *Tx) Exec(query string, args ...interface{}) (sql.Result, error) {
-	res, err := x.tx.Exec(query, args...)
-	return res, x.CheckErr(err)
+	return x.tx.ExecContext(context.Background(), query, args...)
 }
 
-// Query is a wrapper around sql.Tx.Query.
-// Implements boil.Executor
+// Query is a wrapper around sql.Tx.QueryContext,
+// using context.Background().
 func (x *Tx) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	rows, err := x.tx.Query(query, args...)
-	return rows, x.CheckErr(err)
+	return x.tx.QueryContext(context.Background(), query, args...)
 }
 
-// QueryRow is a wrapper around sql.Tx.QueryRow.
-// Implements boil.Executor
-// Since errors are defered untill row.Scan, this package cannot monitor such errors.
+// QueryRow is a wrapper around sql.Tx.QueryRowContext,
+// using context.Background().
 func (x *Tx) QueryRow(query string, args ...interface{}) *sql.Row {
-	return x.tx.QueryRow(query, args...)
+	return x.tx.QueryRowContext(context.Background(), query, args...)
 }
 
-// ExecContext is a wrapper around sql.Tx.Exec.
-// Implements boil.ContextExecutor
+// ExecContext is a wrapper around sql.Tx.ExecContext.
 func (x *Tx) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	res, err := x.tx.ExecContext(ctx, query, args...)
 	return res, x.CheckErr(err)
 }
 
-// QueryContext is a wrapper around sql.Tx.Query.
-// Implements boil.ContextExecutor
+// QueryContext is a wrapper around sql.Tx.QueryContext.
 func (x *Tx) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	rows, err := x.tx.QueryContext(ctx, query, args...)
 	return rows, x.CheckErr(err)
 }
 
-// QueryRowContext is a wrapper around sql.Tx.QueryRow.
-// Implements boil.ContextExecutor
-// Since errors are defered untill row.Scan, this package cannot monitor such errors.
+// QueryRowContext is a wrapper around sql.Tx.QueryRowContext.
 func (x *Tx) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return x.tx.QueryRowContext(ctx, query, args...)
+	row := x.tx.QueryRowContext(ctx, query, args...)
+	x.CheckErr(row.Err())
+
+	return row
 }

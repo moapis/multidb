@@ -35,7 +35,7 @@ This makes it an excellent fit for SQLBoiler's auto-generated models.
 
 ## Dependencies
 
-This package has been developed against Go 1.13, with module support and might not work properly on older Go versions.
+This package has been developed against Go 1.15, with module support and will not compile against older Go versions.
 The core package is slim and only depends on the standard Go libraries. 
 Packages in `drivers/` usually depend on their SQL driver counterpart.
 Unit tests pull in some additional packages like `go-sqlmock` and `sqlboiler`.
