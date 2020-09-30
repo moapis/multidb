@@ -130,10 +130,10 @@ func electMaster(ctx context.Context, nodes []*Node) (*Node, error) {
 	rc := make(chan result, len(available))
 	for _, n := range available {
 		go func(n *Node) {
-			res := result{node: n}
-			if err := n.QueryRowContext(ctx, n.MasterQuery()).Scan(&res.isMaster); err != nil {
-				res.err = n.CheckErr(err) // Should be removed when QueryRowContext becomes error aware
+			res := result{
+				node: n,
 			}
+			res.err = n.QueryRowContext(ctx, n.MasterQuery()).Scan(&res.isMaster)
 			rc <- res
 		}(n)
 	}

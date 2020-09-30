@@ -136,10 +136,8 @@ func (m *MultiTx) Query(query string, args ...interface{}) (*sql.Rows, error) {
 
 // QueryRowContext runs sql.Tx.QueryRowContext on the tranactions in separate Go routines.
 // The first result is returned immediately, regardless if that result has an error.
-//
-// Errors in sql.Tx.QueryRow are deferred until scan and therefore opaque to this package.
-// If you have a choice, stick with a regular QueryContext.
-// This method is primarily included to implement boil.Executor.
+// The first error free result is returned immediately.
+// If all result sql.Row objects contain an error, only the last Row containing the error is returned.
 func (m *MultiTx) QueryRowContext(ctx context.Context, query string, args ...interface{}) (row *sql.Row) {
 	row, m.done = multiQueryRow(m.context(ctx), mtx2Exec(m.tx), query, args...)
 	return row

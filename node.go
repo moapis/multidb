@@ -67,7 +67,8 @@ func (s *nodeStats) failed(state bool) bool {
 	return count > s.maxFails
 }
 
-// Node represents a database server connection
+// Node represents a database server connection.
+// Node Implements boil.ContextExecutor
 type Node struct {
 	nodeStats
 	drivers.Configurator
@@ -212,7 +213,6 @@ func (n *Node) CheckErr(err error) error {
 }
 
 // ExecContext wrapper around sql.DB.Exec.
-// Implements boil.ContextExecutor
 func (n *Node) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	n.mtx.RLock()
 	res, err := n.DB.ExecContext(ctx, query, args...)
@@ -221,14 +221,13 @@ func (n *Node) ExecContext(ctx context.Context, query string, args ...interface{
 	return res, n.CheckErr(err)
 }
 
-// Exec wrapper around sql.DB.Exec.
-// Implements boil.Executor
+// Exec wrapper around sql.DB.ExecContext,
+// using context.Background().
 func (n *Node) Exec(query string, args ...interface{}) (sql.Result, error) {
 	return n.ExecContext(context.Background(), query, args...)
 }
 
-// QueryContext wrapper around sql.DB.Query.
-// Implements boil.ContextExecutor
+// QueryContext wrapper around sql.DB.QueryContext.
 func (n *Node) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	n.mtx.RLock()
 	rows, err := n.DB.QueryContext(ctx, query, args...)
@@ -237,29 +236,25 @@ func (n *Node) QueryContext(ctx context.Context, query string, args ...interface
 	return rows, n.CheckErr(err)
 }
 
-// Query wrapper around sql.DB.Query.
-// Implements boil.Executor
+// Query wrapper around sql.DB.QueryRowContext,
+// using context.Background().
 func (n *Node) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	return n.QueryContext(context.Background(), query, args...)
 }
 
-// BUG(muhlemmer): Can't check errors on sql.Row
-// https://github.com/moapis/multidb/issues/1
-
-// QueryRowContext wrapper around sql.DB.QueryRow.
-// Implements boil.ContextExecutor
-// Since errors are deferred until row.Scan, this package cannot monitor such errors.
+// QueryRowContext wrapper around sql.DB.QueryRowContext.
 func (n *Node) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	n.mtx.RLock()
 	row := n.DB.QueryRowContext(ctx, query, args...)
 	n.mtx.RUnlock()
 
+	n.CheckErr(row.Err())
+
 	return row
 }
 
-// QueryRow wrapper around sql.DB.QueryRow.
-// Implements boil.Executor
-// Since errors are deferred until row.Scan, this package cannot monitor such errors.
+// QueryRow wrapper around sql.DB.QueryRowContext,
+// using context.Background().
 func (n *Node) QueryRow(query string, args ...interface{}) *sql.Row {
 	return n.QueryRowContext(context.Background(), query, args...)
 }
@@ -267,7 +262,7 @@ func (n *Node) QueryRow(query string, args ...interface{}) *sql.Row {
 // BUG(muhlemmer): Node types do not implement boil.Beginner
 // https://github.com/moapis/multidb/issues/2
 
-// BeginTx opens a new *sql.Tx inside a Tx.
+// BeginTx opens a new *sql.Tx on the Node.
 func (n *Node) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 	n.mtx.RLock()
 	tx, err := n.DB.BeginTx(ctx, opts)
@@ -276,8 +271,7 @@ func (n *Node) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 	return &Tx{n, tx}, n.CheckErr(err)
 }
 
-// Begin opens a new *sql.Tx inside a Tx.
-// Does NOT implement boil.Beginner, as it requires a *sql.Tx.
+// Begin opens a new *sql.Tx on the Node.
 func (n *Node) Begin() (*Tx, error) {
 	return n.BeginTx(context.Background(), nil)
 }
