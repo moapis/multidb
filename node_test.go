@@ -7,7 +7,6 @@ package multidb
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -437,18 +436,6 @@ func TestNode_InUse(t *testing.T) {
 	}
 }
 
-func TestNode_Err(t *testing.T) {
-	n := newNode(defaultTestConfig(), testDSN, 1000, 22, 0)
-	n.setErr(errors.New(ErrAlreadyOpen))
-	err := n.ConnErr()
-	if err == nil || err.Error() != ErrAlreadyOpen {
-		t.Errorf("Node.ConnErr() Err = %v, want %v", err, ErrAlreadyOpen)
-	}
-
-	n.mtx.Lock()
-	n.mtx.Unlock()
-}
-
 func TestNode_checkFailed(t *testing.T) {
 	n := newNode(defaultTestConfig(), testDSN, 10, 5, 0)
 	if err := n.Open(); err != nil {
@@ -486,9 +473,6 @@ func TestNode_CheckErr(t *testing.T) {
 		}
 
 		n.mtx.RLock()
-		if n.connErr != nil {
-			t.Errorf("Node.CheckErr() connErr = %v, want %v", n.connErr, nil)
-		}
 		if n.DB == nil {
 			t.Errorf("Node.CheckErr() DB = %v, want %v", n.DB, "DB")
 		}
@@ -503,9 +487,6 @@ func TestNode_CheckErr(t *testing.T) {
 	}
 
 	n.mtx.RLock()
-	if n.connErr != sql.ErrConnDone {
-		t.Errorf("Node.CheckErr() connErr = %v, want %v", n.connErr, sql.ErrConnDone)
-	}
 	if n.DB == nil {
 		t.Errorf("Node.CheckErr() DB = %v, want %v", n.DB, "DB")
 	}
@@ -519,9 +500,6 @@ func TestNode_CheckErr(t *testing.T) {
 	}
 
 	n.mtx.RLock()
-	if n.connErr != sql.ErrConnDone {
-		t.Errorf("Node.CheckErr() connErr = %v, want %v", n.connErr, sql.ErrConnDone)
-	}
 	if n.DB != nil {
 		t.Errorf("Node.CheckErr() DB = %v, want %v", n.DB, nil)
 	}

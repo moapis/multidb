@@ -75,7 +75,6 @@ type Node struct {
 	// DB holds the raw *sql.DB for direct access.
 	// Errors produced by calling DB directly are not monitored by this package.
 	DB            *sql.DB
-	connErr       error
 	reconnectWait time.Duration
 	reconnecting  bool
 	mtx           sync.RWMutex
@@ -92,7 +91,7 @@ func newNode(conf drivers.Configurator, dsn string, statsLen, maxFails int, reco
 
 // Open calls sql.Open() with the configured driverName and dataSourceName.
 // Open should only be used after the Node was (auto-)closed and reconnection is disabled.
-func (n *Node) Open() error {
+func (n *Node) Open() (err error) {
 	n.mtx.Lock()
 	defer n.mtx.Unlock()
 
@@ -100,10 +99,10 @@ func (n *Node) Open() error {
 		return errors.New(ErrAlreadyOpen)
 	}
 
-	n.DB, n.connErr = sql.Open(n.DriverName(), n.dataSourceName)
+	n.DB, err = sql.Open(n.DriverName(), n.dataSourceName)
 	n.reset()
 
-	return n.connErr
+	return err
 }
 
 // Close the current node and make it unavailable
@@ -117,9 +116,7 @@ func (n *Node) Close() error {
 	} else {
 		err = n.DB.Close()
 	}
-	if err != nil {
-		n.connErr = err
-	}
+
 	n.DB = nil
 	return err
 }
@@ -166,20 +163,6 @@ func (n *Node) InUse() int {
 	return n.DB.Stats().InUse
 }
 
-func (n *Node) setErr(err error) {
-	n.mtx.Lock()
-	n.connErr = err
-	n.mtx.Unlock()
-}
-
-// ConnErr returns the last encountered connection error for Node
-func (n *Node) ConnErr() error {
-	n.mtx.RLock()
-	defer n.mtx.RUnlock()
-
-	return n.connErr
-}
-
 // checkFailed closes this Node's DB pool if failed.
 // After closing reconnection is initiated, if applicable.
 func (n *Node) checkFailed(state bool) {
@@ -205,7 +188,6 @@ func (n *Node) CheckErr(err error) error {
 	case n.WhiteList(err):
 		go n.checkFailed(false)
 	default:
-		n.setErr(err)
 		go n.checkFailed(true)
 	}
 	return err
