@@ -54,17 +54,22 @@ type executor interface {
 	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
 }
 
-func nodes2Exec(nodes []*Node) (xs []executor) {
-	for _, n := range nodes {
-		xs = append(xs, n)
+func nodes2Exec(nodes []*Node) []executor {
+	xs := make([]executor, len(nodes))
+
+	for i, node := range nodes {
+		xs[i] = node
 	}
 	return xs
 }
 
-func mtx2Exec(mtx []*Tx) (xs []executor) {
-	for _, tx := range mtx {
-		xs = append(xs, tx)
+func mtx2Exec(mtx []*Tx) []executor {
+	xs := make([]executor, len(mtx))
+
+	for i, tx := range mtx {
+		xs[i] = tx
 	}
+
 	return xs
 }
 

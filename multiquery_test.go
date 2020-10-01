@@ -506,8 +506,8 @@ go test -benchmem -bench .
 goos: linux
 goarch: amd64
 pkg: github.com/moapis/multidb
-Benchmark_nodes2Exec-8            542857              2375 ns/op            4080 B/op          8 allocs/op
-Benchmark_mtx2Exec-8              460832              2642 ns/op            4080 B/op          8 allocs/op
+Benchmark_nodes2Exec-8           1426524               907 ns/op            1792 B/op          1 allocs/op
+Benchmark_mtx2Exec-8             1195972              1015 ns/op            1792 B/op          1 allocs/op
 Benchmark_multiExec-8              35452             33873 ns/op            3888 B/op          6 allocs/op
 Benchmark_multiQuery-8             17300             68745 ns/op            2110 B/op          5 allocs/op
 Benchmark_multiQueryRow-8          17296             68638 ns/op             210 B/op          3 allocs/op
