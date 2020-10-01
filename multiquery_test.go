@@ -156,12 +156,14 @@ func TestMultiError_check(t *testing.T) {
 	}
 }
 
-func multiTestConnect() (*MultiDB, []sm.Sqlmock, error) {
+const defaultTestConns = 3
+
+func multiTestConnect(conns int) (*MultiDB, []sm.Sqlmock, error) {
 	var (
 		mocks []sm.Sqlmock
 		nodes []*Node
 	)
-	for i := 0; i < 3; i++ {
+	for i := 0; i < conns; i++ {
 		db, mock, err := sm.New()
 		if err != nil {
 			return nil, nil, err
@@ -180,7 +182,7 @@ func multiTestConnect() (*MultiDB, []sm.Sqlmock, error) {
 
 func Test_multiExec(t *testing.T) {
 	t.Log("All nodes healthy")
-	mdb, mocks, err := multiTestConnect()
+	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +201,7 @@ func Test_multiExec(t *testing.T) {
 	<-done
 
 	t.Log("Healty delayed, two error")
-	mdb, mocks, err = multiTestConnect()
+	mdb, mocks, err = multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +224,7 @@ func Test_multiExec(t *testing.T) {
 	<-done
 
 	t.Log("All same error")
-	mdb, mocks, err = multiTestConnect()
+	mdb, mocks, err = multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +243,7 @@ func Test_multiExec(t *testing.T) {
 	}
 
 	t.Log("Different errors")
-	mdb, mocks, err = multiTestConnect()
+	mdb, mocks, err = multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +272,7 @@ func Test_multiExec(t *testing.T) {
 
 func Test_multiQuery(t *testing.T) {
 	t.Log("All nodes healthy")
-	mdb, mocks, err := multiTestConnect()
+	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +297,7 @@ func Test_multiQuery(t *testing.T) {
 	}
 
 	t.Log("Healty delayed, two error")
-	mdb, mocks, err = multiTestConnect()
+	mdb, mocks, err = multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +325,7 @@ func Test_multiQuery(t *testing.T) {
 	}
 
 	t.Log("All same error")
-	mdb, mocks, err = multiTestConnect()
+	mdb, mocks, err = multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -342,7 +344,7 @@ func Test_multiQuery(t *testing.T) {
 	}
 
 	t.Log("Different errors")
-	mdb, mocks, err = multiTestConnect()
+	mdb, mocks, err = multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,7 +373,7 @@ func Test_multiQuery(t *testing.T) {
 
 func Test_multiQueryRow(t *testing.T) {
 	t.Log("All nodes healthy")
-	mdb, mocks, err := multiTestConnect()
+	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -391,7 +393,7 @@ func Test_multiQueryRow(t *testing.T) {
 	<-done
 
 	t.Log("All same error")
-	mdb, mocks, err = multiTestConnect()
+	mdb, mocks, err = multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,6 +410,39 @@ func Test_multiQueryRow(t *testing.T) {
 		t.Errorf("multiQueryRow() Res = %v, want %v", got, "")
 	}
 	<-done
+}
+
+func Benchmark_nodes2Exec(b *testing.B) {
+	mdb, _, err := multiTestConnect(benchmarkConns)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		nodes2Exec(mdb.all)
+	}
+}
+
+func Benchmark_mtx2Exec(b *testing.B) {
+	mdb, mocks, err := multiTestConnect(benchmarkConns)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	for _, m := range mocks {
+		m.ExpectBegin()
+	}
+
+	mtx, err := mdb.MultiTx(context.Background(), nil, benchmarkConns)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		mtx2Exec(mtx.tx)
+	}
 }
 
 // benchExecutor is a simple (no-op) executor implementation
@@ -467,14 +502,16 @@ func Benchmark_multiQueryRow(b *testing.B) {
 
 /* Current Benchmark output:
 
-go test -benchtime 1000000x -benchmem -bench .
+go test -benchmem -bench .
 goos: linux
 goarch: amd64
 pkg: github.com/moapis/multidb
-Benchmark_multiExec-8            1000000             33035 ns/op            3888 B/op          6 allocs/op
-Benchmark_multiQuery-8           1000000             67270 ns/op            2111 B/op          5 allocs/op
-Benchmark_multiQueryRow-8        1000000             67515 ns/op             210 B/op          3 allocs/op
+Benchmark_nodes2Exec-8            542857              2375 ns/op            4080 B/op          8 allocs/op
+Benchmark_mtx2Exec-8              460832              2642 ns/op            4080 B/op          8 allocs/op
+Benchmark_multiExec-8              35452             33873 ns/op            3888 B/op          6 allocs/op
+Benchmark_multiQuery-8             17300             68745 ns/op            2110 B/op          5 allocs/op
+Benchmark_multiQueryRow-8          17296             68638 ns/op             210 B/op          3 allocs/op
 PASS
-ok      github.com/moapis/multidb       172.659s
+ok      github.com/moapis/multidb       14.299s
 
 */

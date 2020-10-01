@@ -18,7 +18,7 @@ func _() boil.Transactor        { return &MultiTx{} }
 func _() boil.ContextTransactor { return &MultiTx{} }
 
 func prepareTestTx() (*MultiTx, []sm.Sqlmock, error) {
-	mdb, mocks, err := multiTestConnect()
+	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		return nil, nil, err
 	}

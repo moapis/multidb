@@ -17,7 +17,7 @@ func _() boil.ContextExecutor { return MultiNode{} }
 // Simple tests for the wrapper methods
 func TestMultiNode_General(t *testing.T) {
 	t.Log("ExecContext")
-	mdb, mocks, err := multiTestConnect()
+	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestMultiNode_General(t *testing.T) {
 	}
 
 	t.Log("Exec")
-	mdb, mocks, err = multiTestConnect()
+	mdb, mocks, err = multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestMultiNode_General(t *testing.T) {
 	want := "value"
 
 	t.Log("QueryContext")
-	mdb, mocks, err = multiTestConnect()
+	mdb, mocks, err = multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestMultiNode_General(t *testing.T) {
 	}
 
 	t.Log("Query")
-	mdb, mocks, err = multiTestConnect()
+	mdb, mocks, err = multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestMultiNode_General(t *testing.T) {
 	}
 
 	t.Log("QueryRowContext")
-	mdb, mocks, err = multiTestConnect()
+	mdb, mocks, err = multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestMultiNode_General(t *testing.T) {
 	}
 
 	t.Log("QueryRow")
-	mdb, mocks, err = multiTestConnect()
+	mdb, mocks, err = multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestMultiNode_General(t *testing.T) {
 
 func TestMultiNode_BeginTx(t *testing.T) {
 	t.Log("All nodes healthy")
-	mdb, mocks, err := multiTestConnect()
+	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func TestMultiNode_BeginTx(t *testing.T) {
 	}
 
 	t.Log("Healty delayed, two error")
-	mdb, mocks, err = multiTestConnect()
+	mdb, mocks, err = multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestMultiNode_BeginTx(t *testing.T) {
 	}
 
 	t.Log("All same error")
-	mdb, mocks, err = multiTestConnect()
+	mdb, mocks, err = multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestMultiNode_BeginTx(t *testing.T) {
 	}
 
 	t.Log("Different errors")
-	mdb, mocks, err = multiTestConnect()
+	mdb, mocks, err = multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +226,7 @@ func TestMultiNode_BeginTx(t *testing.T) {
 	}
 
 	t.Log("Begin wrapper")
-	mdb, mocks, err = multiTestConnect()
+	mdb, mocks, err = multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
