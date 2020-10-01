@@ -409,3 +409,72 @@ func Test_multiQueryRow(t *testing.T) {
 	}
 	<-done
 }
+
+// benchExecutor is a simple (no-op) executor implementation
+type benchExecutor struct{}
+
+func (*benchExecutor) ExecContext(context.Context, string, ...interface{}) (sql.Result, error) {
+	return nil, nil
+}
+func (*benchExecutor) QueryContext(context.Context, string, ...interface{}) (*sql.Rows, error) {
+	return nil, nil
+}
+func (*benchExecutor) QueryRowContext(context.Context, string, ...interface{}) *sql.Row {
+	return nil
+}
+
+const benchmarkConns = 100
+
+func initBenchExecutors() []executor {
+	ex := make([]executor, benchmarkConns)
+
+	for i := 0; i < benchmarkConns; i++ {
+		ex[i] = &benchExecutor{}
+	}
+
+	return ex
+}
+
+func Benchmark_multiExec(b *testing.B) {
+	ex := initBenchExecutors()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, done, _ := multiExec(context.Background(), ex, "")
+		<-done
+	}
+}
+
+func Benchmark_multiQuery(b *testing.B) {
+	ex := initBenchExecutors()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, done, _ := multiQuery(context.Background(), ex, "")
+		<-done
+	}
+}
+
+func Benchmark_multiQueryRow(b *testing.B) {
+	ex := initBenchExecutors()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, done := multiQueryRow(context.Background(), ex, "")
+		<-done
+	}
+}
+
+/* Current Benchmark output:
+
+go test -benchtime 1000000x -benchmem -bench .
+goos: linux
+goarch: amd64
+pkg: github.com/moapis/multidb
+Benchmark_multiExec-8            1000000             33035 ns/op            3888 B/op          6 allocs/op
+Benchmark_multiQuery-8           1000000             67270 ns/op            2111 B/op          5 allocs/op
+Benchmark_multiQueryRow-8        1000000             67515 ns/op             210 B/op          3 allocs/op
+PASS
+ok      github.com/moapis/multidb       172.659s
+
+*/

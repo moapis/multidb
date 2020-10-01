@@ -77,10 +77,9 @@ func multiExec(ctx context.Context, xs []executor, query string, args ...interfa
 	for _, x := range xs {
 		go func(x executor) {
 			res, err := x.ExecContext(ctx, query, args...)
-			switch { // Make sure only one of them is returned
-			case err != nil:
+			if err != nil { // Make sure only one of them is returned
 				ec <- err
-			case res != nil:
+			} else {
 				rc <- res
 			}
 			wg.Done()
@@ -116,10 +115,9 @@ func multiQuery(ctx context.Context, xs []executor, query string, args ...interf
 	for _, x := range xs {
 		go func(x executor) {
 			rows, err := x.QueryContext(ctx, query, args...)
-			switch { // Make sure only one of them is returned
-			case err != nil:
+			if err != nil { // Make sure only one of them is returned
 				ec <- err
-			case rows != nil:
+			} else {
 				rc <- rows
 			}
 			wg.Done()
@@ -138,7 +136,9 @@ func multiQuery(ctx context.Context, xs []executor, query string, args ...interf
 		done := make(chan struct{}) // Done signals the caller that all remaining rows are properly closed
 		go func() {
 			for rows := range rc { // Drain channel and close unused Rows
-				rows.Close()
+				if rows != nil {
+					rows.Close()
+				}
 			}
 			close(done)
 		}()
@@ -174,7 +174,9 @@ func multiQueryRow(ctx context.Context, xs []executor, query string, args ...int
 	defer func() {
 		go func() {
 			for row := range rc { // Drain channel and close unused Row
-				row.Scan(&sql.RawBytes{}) // hack to trigger Rows.Close()
+				if row != nil {
+					row.Scan(&sql.RawBytes{}) // hack to trigger Rows.Close()
+				}
 			}
 			close(done)
 		}()
