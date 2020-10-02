@@ -88,7 +88,7 @@ func (mn MultiNode) txBeginners() []txBeginner {
 // but we want to leave the descission whetter to proceed or not, up to the caller.
 func (mn MultiNode) BeginTx(ctx context.Context, opts *sql.TxOptions) (mtx *MultiTx, err error) {
 	mtx = new(MultiTx)
-	mtx.tx, err = beginMultiTx(ctx, opts, mn.txBeginners()...)
+	mtx.tx, err = beginMultiTx(ctx, readOnlyOpts(opts), mn.txBeginners()...)
 	return mtx, err
 }
 

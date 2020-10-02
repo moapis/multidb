@@ -11,37 +11,46 @@ type txBeginner interface {
 }
 
 func beginMultiTx(ctx context.Context, opts *sql.TxOptions, txb ...txBeginner) ([]*Tx, error) {
-	tc := make(chan *Tx, len(txb))
-	ec := make(chan error, len(txb))
+	type result struct {
+		tx  *Tx
+		err error
+	}
+
+	rc := make(chan result, len(txb))
+
 	for _, n := range txb {
 		go func(n txBeginner) {
-			tx, err := n.BeginTx(ctx, readOnlyOpts(opts))
-			switch { // Make sure only one of them is returned
-			case err != nil:
-				ec <- err
-			case tx != nil:
-				tc <- tx
-			}
+			var r result
+			r.tx, r.err = n.BeginTx(ctx, opts)
+			rc <- r
 		}(n)
 	}
 
 	var errs []error
 
-	mtx := make([]*Tx, 0, len(txb))
+	txs := make([]*Tx, 0, len(txb))
 
 	for i := 0; i < len(txb); i++ {
-		select {
-		case err := <-ec:
-			errs = append(errs, err)
-		case tx := <-tc:
-			mtx = append(mtx, tx)
+		r := <-rc
+
+		if r.err != nil {
+			errs = append(errs, r.err)
+			continue
 		}
-	}
-	if len(mtx) == 0 {
-		return nil, checkMultiError(errs)
+
+		txs = append(txs, r.tx)
+
 	}
 
-	return mtx, checkMultiError(errs)
+	if errs != nil {
+		if len(txs) == 0 {
+			return nil, checkMultiError(errs)
+		}
+
+		return txs, checkMultiError(errs)
+	}
+
+	return txs, nil
 }
 
 // MultiTx holds a slice of open transactions to multiple nodes.

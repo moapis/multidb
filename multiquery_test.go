@@ -488,17 +488,17 @@ go test -benchmem -bench .
 goos: linux
 goarch: amd64
 pkg: github.com/moapis/multidb
-Benchmark_beginMultiTx-8                   19423             58600 ns/op            6976 B/op        205 allocs/op
-BenchmarkMultiNode_txBeginners-8         1402120               931 ns/op            1792 B/op          1 allocs/op
-Benchmark_nodes2Exec-8                   1209753               976 ns/op            1792 B/op          1 allocs/op
-Benchmark_mtx2Exec-8                     1163184              1001 ns/op            1792 B/op          1 allocs/op
-Benchmark_multiExec-8                      40958             29501 ns/op            3394 B/op          5 allocs/op
-Benchmark_multiExec_wait-8                 35953             33132 ns/op            3392 B/op          5 allocs/op
-Benchmark_multiQuery-8                     40780             28957 ns/op            3307 B/op          3 allocs/op
-Benchmark_multiQuery_wait-8                27171             44374 ns/op            3292 B/op          4 allocs/op
-Benchmark_multiQueryRow-8                  26887             44119 ns/op            1000 B/op          3 allocs/op
-Benchmark_multiQueryRow_wait-8             27172             44308 ns/op            1000 B/op          3 allocs/op
+Benchmark_beginMultiTx-8                   24188             46950 ns/op            5280 B/op        103 allocs/op
+BenchmarkMultiNode_txBeginners-8         1382906               936 ns/op            1792 B/op          1 allocs/op
+Benchmark_nodes2Exec-8                   1000000              1017 ns/op            1792 B/op          1 allocs/op
+Benchmark_mtx2Exec-8                     1000000              1015 ns/op            1792 B/op          1 allocs/op
+Benchmark_multiExec-8                      40836             28774 ns/op            3392 B/op          5 allocs/op
+Benchmark_multiExec_wait-8                 36723             32793 ns/op            3392 B/op          5 allocs/op
+Benchmark_multiQuery-8                     42198             29085 ns/op            3306 B/op          3 allocs/op
+Benchmark_multiQuery_wait-8                26955             44723 ns/op            3292 B/op          3 allocs/op
+Benchmark_multiQueryRow-8                  26910             44643 ns/op            1000 B/op          3 allocs/op
+Benchmark_multiQueryRow_wait-8             26415             44659 ns/op            1000 B/op          3 allocs/op
 PASS
-ok      github.com/moapis/multidb       23.063s
+ok      github.com/moapis/multidb       20.978s
 
 */
