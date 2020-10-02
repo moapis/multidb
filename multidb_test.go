@@ -273,7 +273,7 @@ func Test_electMaster(t *testing.T) {
 	defer cancel()
 
 	got, err = electMaster(ctx, nodes)
-	_, ok := err.(MultiError)
+	_, ok := err.(*MultiError)
 	if !ok {
 		t.Errorf("electMaster() err = %T, want %T", err, MultiError{})
 	}

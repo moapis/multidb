@@ -13,7 +13,7 @@ type MultiError struct {
 	Errors []error
 }
 
-func (me MultiError) Error() string {
+func (me *MultiError) Error() string {
 	if len(me.Errors) == 0 {
 		return "Unknown error"
 	}
@@ -26,25 +26,35 @@ func (me MultiError) Error() string {
 	return bs.String()
 }
 
-func (me *MultiError) append(err error) {
-	me.Errors = append(me.Errors, err)
-}
-
-// check returns a single error if all errors in the MultiError are the same.
+// checkMultiError returns a single error if all errors in the MultiError are the same.
 // Otherwise, it returns the MultiError containing the multiple errors.
 // Returns nil if the are no errors.
-func (me MultiError) check() error {
+func checkMultiError(errs []error) error {
 	var first error
-	for _, err := range me.Errors {
+
+	for _, err := range errs {
 		switch {
 		case err == nil:
 			break
 		case first == nil:
 			first = err
 		case err != first:
-			return me
+
+			target := &MultiError{
+				Errors: make([]error, 0, len(errs)),
+			}
+
+			// Purge nil entries
+			for _, err := range errs {
+				if err != nil {
+					target.Errors = append(target.Errors, err)
+				}
+			}
+
+			return target
 		}
 	}
+
 	return first
 }
 
@@ -101,7 +111,7 @@ func multiExec(ctx context.Context, wg *sync.WaitGroup, xs []executor, query str
 		}(x)
 	}
 
-	var me MultiError
+	var errs []error
 
 	for i := len(xs); i > 0; i-- {
 		r := <-rc
@@ -110,10 +120,10 @@ func multiExec(ctx context.Context, wg *sync.WaitGroup, xs []executor, query str
 			return r.res, nil
 		}
 
-		me.append(r.err)
+		errs = append(errs, r.err)
 	}
 
-	return nil, me.check()
+	return nil, checkMultiError(errs)
 }
 
 func multiQuery(ctx context.Context, wg *sync.WaitGroup, xs []executor, query string, args ...interface{}) (*sql.Rows, error) {
@@ -141,7 +151,7 @@ func multiQuery(ctx context.Context, wg *sync.WaitGroup, xs []executor, query st
 		}(xs[i])
 	}
 
-	var me MultiError
+	var errs []error
 
 	for i := len(xs); i > 0; i-- {
 		r := <-rc
@@ -160,10 +170,10 @@ func multiQuery(ctx context.Context, wg *sync.WaitGroup, xs []executor, query st
 			return r.rows, nil
 		}
 
-		me.append(r.err)
+		errs = append(errs, r.err)
 	}
 
-	return nil, me.check()
+	return nil, checkMultiError(errs)
 }
 
 func multiQueryRow(ctx context.Context, wg *sync.WaitGroup, xs []executor, query string, args ...interface{}) (row *sql.Row) {

@@ -214,7 +214,7 @@ func TestMultiNode_BeginTx(t *testing.T) {
 		}
 	}
 	m, err = mn.BeginTx(context.Background(), nil)
-	me, ok := err.(MultiError)
+	me, ok := err.(*MultiError)
 	if !ok {
 		t.Errorf("mtx.BeginTx() expected err type: %T, got: %T", MultiError{}, err)
 	}

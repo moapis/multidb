@@ -55,44 +55,7 @@ func TestMultiError_Error(t *testing.T) {
 	}
 }
 
-func TestMultiError_append(t *testing.T) {
-	type args struct {
-		err error
-	}
-	tests := []struct {
-		name   string
-		errors []error
-		args   error
-		want   []error
-	}{
-		{
-			"Append",
-			[]error{
-				errors.New("First"),
-				errors.New("Second"),
-			},
-			errors.New("Third"),
-			[]error{
-				errors.New("First"),
-				errors.New("Second"),
-				errors.New("Third"),
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			me := &MultiError{
-				Errors: tt.errors,
-			}
-			me.append(tt.args)
-			if !reflect.DeepEqual(tt.want, me.Errors) {
-				t.Errorf("MultiError.append() = %v, want %v", me.Errors, tt.want)
-			}
-		})
-	}
-}
-
-func TestMultiError_check(t *testing.T) {
+func Test_checkMultiError(t *testing.T) {
 	tests := []struct {
 		name   string
 		errors []error
@@ -110,7 +73,7 @@ func TestMultiError_check(t *testing.T) {
 				errors.New("Second"),
 				errors.New("Third"),
 			},
-			MultiError{
+			&MultiError{
 				[]error{
 					errors.New("First"),
 					errors.New("Second"),
@@ -126,9 +89,8 @@ func TestMultiError_check(t *testing.T) {
 				errors.New("Second"),
 				errors.New("Third"),
 			},
-			MultiError{
+			&MultiError{
 				[]error{
-					nil,
 					errors.New("First"),
 					errors.New("Second"),
 					errors.New("Third"),
@@ -147,10 +109,7 @@ func TestMultiError_check(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			me := MultiError{
-				Errors: tt.errors,
-			}
-			if got := me.check(); !reflect.DeepEqual(got, tt.want) {
+			if got := checkMultiError(tt.errors); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("MultiError.check() error = %v, want %v", got, tt.want)
 			}
 		})
@@ -256,7 +215,7 @@ func Test_multiExec(t *testing.T) {
 	if err == nil {
 		t.Errorf("multiExec() expected err got: %v", err)
 	}
-	_, ok := err.(MultiError)
+	_, ok := err.(*MultiError)
 	if !ok {
 		t.Errorf("multiExec() expected err type: %T, got: %T", MultiError{}, err)
 	}
@@ -354,7 +313,7 @@ func Test_multiQuery(t *testing.T) {
 	if err == nil {
 		t.Errorf("multiQuery() expected err got: %v", err)
 	}
-	_, ok := err.(MultiError)
+	_, ok := err.(*MultiError)
 	if !ok {
 		t.Errorf("multiQuery() expected err type: %T, got: %T", MultiError{}, err)
 	}
@@ -529,15 +488,15 @@ go test -benchmem -bench .
 goos: linux
 goarch: amd64
 pkg: github.com/moapis/multidb
-Benchmark_nodes2Exec-8                   1376334               926 ns/op            1792 B/op          1 allocs/op
-Benchmark_mtx2Exec-8                     1200560              1009 ns/op            1792 B/op          1 allocs/op
-Benchmark_multiExec-8                      42184             28397 ns/op            3392 B/op          5 allocs/op
-Benchmark_multiExec_wait-8                 37711             32095 ns/op            3392 B/op          5 allocs/op
-Benchmark_multiQuery-8                     41403             29193 ns/op            3315 B/op          5 allocs/op
-Benchmark_multiQuery_wait-8                27154             44173 ns/op            3300 B/op          5 allocs/op
-Benchmark_multiQueryRow-8                  27008             43920 ns/op            1000 B/op          3 allocs/op
-Benchmark_multiQueryRow_wait-8             27111             44126 ns/op            1000 B/op          3 allocs/op
+Benchmark_nodes2Exec-8                   1411300               917 ns/op            1792 B/op          1 allocs/op
+Benchmark_mtx2Exec-8                     1187618              1013 ns/op            1792 B/op          1 allocs/op
+Benchmark_multiExec-8                      41971             28426 ns/op            3392 B/op          5 allocs/op
+Benchmark_multiExec_wait-8                 37387             31992 ns/op            3392 B/op          5 allocs/op
+Benchmark_multiQuery-8                     40501             28693 ns/op            3308 B/op          3 allocs/op
+Benchmark_multiQuery_wait-8                27075             44565 ns/op            3291 B/op          3 allocs/op
+Benchmark_multiQueryRow-8                  27300             43725 ns/op            1000 B/op          3 allocs/op
+Benchmark_multiQueryRow_wait-8             27147             43747 ns/op            1000 B/op          3 allocs/op
 PASS
-ok      github.com/moapis/multidb       18.840s
+ok      github.com/moapis/multidb       19.108s
 
 */

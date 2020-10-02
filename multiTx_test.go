@@ -229,7 +229,7 @@ func TestMultiTx_Rollback(t *testing.T) {
 		}
 	}
 	err = tx.Rollback()
-	me, ok := err.(MultiError)
+	me, ok := err.(*MultiError)
 	if !ok {
 		t.Errorf("mtx.Rollback() expected err type: %T, got: %T", MultiError{}, err)
 	}
@@ -282,7 +282,7 @@ func TestMultiTx_Commit(t *testing.T) {
 		}
 	}
 	err = tx.Commit()
-	me, ok := err.(MultiError)
+	me, ok := err.(*MultiError)
 	if !ok {
 		t.Errorf("mtx.Commit() expected err type: %T, got: %T", MultiError{}, err)
 	}

@@ -46,13 +46,16 @@ func (m *MultiTx) Rollback() error {
 			ec <- err
 		}(tx)
 	}
-	var me MultiError
+
+	var errs []error
+
 	for i := 0; i < len(m.tx); i++ {
 		if err := <-ec; err != nil {
-			me.append(err)
+			errs = append(errs, err)
 		}
 	}
-	return me.check()
+
+	return checkMultiError(errs)
 }
 
 // Commit runs sql.Tx.Commit on the transactions in separate Go routines.
@@ -76,13 +79,16 @@ func (m *MultiTx) Commit() error {
 			ec <- tx.Commit()
 		}(tx)
 	}
-	var me MultiError
+
+	var errs []error
+
 	for i := 0; i < len(m.tx); i++ {
 		if err := <-ec; err != nil {
-			me.append(err)
+			errs = append(errs, err)
 		}
 	}
-	return me.check()
+
+	return checkMultiError(errs)
 }
 
 // Context creates a child context and appends CancelFunc in MultiTx

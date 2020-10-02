@@ -92,7 +92,7 @@ func (mn MultiNode) BeginTx(ctx context.Context, opts *sql.TxOptions) (*MultiTx,
 		}(n)
 	}
 
-	var me MultiError
+	var errs []error
 
 	m := &MultiTx{
 		tx: make([]*Tx, 0, len(mn)),
@@ -102,15 +102,16 @@ func (mn MultiNode) BeginTx(ctx context.Context, opts *sql.TxOptions) (*MultiTx,
 	for i := 0; i < len(mn); i++ {
 		select {
 		case err := <-ec:
-			me.append(err)
+			errs = append(errs, err)
 		case tx := <-tc:
 			m.tx = append(m.tx, tx)
 		}
 	}
 	if len(m.tx) == 0 {
-		return nil, me.check()
+		return nil, checkMultiError(errs)
 	}
-	return m, me.check()
+
+	return m, checkMultiError(errs)
 }
 
 // Begin runs BeginTx with context.Background().

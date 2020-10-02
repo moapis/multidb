@@ -103,13 +103,15 @@ func (mdb *MultiDB) Close() error {
 	mdb.mtx.Lock()
 	defer mdb.mtx.Unlock()
 
-	var me MultiError
+	var errs []error
+
 	for _, n := range mdb.all {
 		if err := n.Close(); err != nil {
-			me.append(err)
+			errs = append(errs, err)
 		}
 	}
-	return me.check()
+
+	return checkMultiError(errs)
 }
 
 func electMaster(ctx context.Context, nodes []*Node) (*Node, error) {
@@ -137,17 +139,20 @@ func electMaster(ctx context.Context, nodes []*Node) (*Node, error) {
 			rc <- res
 		}(n)
 	}
-	var me MultiError
+
+	var errs []error
+
 	for i := 0; i < len(available); i++ {
 		res := <-rc
 		if res.isMaster {
 			return res.node, nil
 		}
 		if res.err != nil {
-			me.Errors = append(me.Errors, res.err)
+			errs = append(errs, res.err)
 		}
 	}
-	return nil, me.check()
+
+	return nil, checkMultiError(errs)
 }
 
 func (mdb *MultiDB) setMaster(ctx context.Context) (*Node, error) {
