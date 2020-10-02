@@ -3,7 +3,6 @@ package multidb
 import (
 	"context"
 	"database/sql"
-	"sync"
 )
 
 // MultiNode holds a slice of Nodes.
@@ -63,6 +62,16 @@ func (mn MultiNode) QueryRow(query string, args ...interface{}) *sql.Row {
 	return multiQueryRow(context.Background(), nil, nodes2Exec(mn), query, args...)
 }
 
+func (mn MultiNode) txBeginners() []txBeginner {
+	txb := make([]txBeginner, len(mn))
+
+	for i, node := range mn {
+		txb[i] = node
+	}
+
+	return txb
+}
+
 // BeginTx runs sql.DB.BeginTx on the Nodes in separate Go routines.
 // The transactions are created in ReadOnly mode.
 // It waits for all the calls to return or the context to expire.
@@ -77,41 +86,10 @@ func (mn MultiNode) QueryRow(query string, args ...interface{}) *sql.Row {
 // Tx will carry fewer amount of entries than requested.
 // This breaks the common `if err != nil` convention,
 // but we want to leave the descission whetter to proceed or not, up to the caller.
-func (mn MultiNode) BeginTx(ctx context.Context, opts *sql.TxOptions) (*MultiTx, error) {
-	tc := make(chan *Tx, len(mn))
-	ec := make(chan error, len(mn))
-	for _, n := range mn {
-		go func(n *Node) {
-			tx, err := n.BeginTx(ctx, readOnlyOpts(opts))
-			switch { // Make sure only one of them is returned
-			case err != nil:
-				ec <- err
-			case tx != nil:
-				tc <- tx
-			}
-		}(n)
-	}
-
-	var errs []error
-
-	m := &MultiTx{
-		tx: make([]*Tx, 0, len(mn)),
-		wg: &sync.WaitGroup{},
-	}
-
-	for i := 0; i < len(mn); i++ {
-		select {
-		case err := <-ec:
-			errs = append(errs, err)
-		case tx := <-tc:
-			m.tx = append(m.tx, tx)
-		}
-	}
-	if len(m.tx) == 0 {
-		return nil, checkMultiError(errs)
-	}
-
-	return m, checkMultiError(errs)
+func (mn MultiNode) BeginTx(ctx context.Context, opts *sql.TxOptions) (mtx *MultiTx, err error) {
+	mtx = new(MultiTx)
+	mtx.tx, err = beginMultiTx(ctx, opts, mn.txBeginners()...)
+	return mtx, err
 }
 
 // Begin runs BeginTx with context.Background().

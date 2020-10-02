@@ -2,9 +2,7 @@ package multidb
 
 import (
 	"context"
-	"database/sql"
 	"testing"
-	"time"
 
 	sm "github.com/DATA-DOG/go-sqlmock"
 	"github.com/volatiletech/sqlboiler/v4/boil"
@@ -141,7 +139,6 @@ func TestMultiNode_General(t *testing.T) {
 }
 
 func TestMultiNode_BeginTx(t *testing.T) {
-	t.Log("All nodes healthy")
 	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
@@ -158,88 +155,38 @@ func TestMultiNode_BeginTx(t *testing.T) {
 	if len(m.tx) != 3 {
 		t.Errorf("mtx.BeginTx() len of tx = %v, want %v", len(m.tx), 3)
 	}
+}
 
-	t.Log("Healty delayed, two error")
-	mdb, mocks, err = multiTestConnect(defaultTestConns)
-	if err != nil {
-		t.Fatal(err)
-	}
-	mn = MultiNode(mdb.All())
-
-	for i, mock := range mocks {
-		if i == 0 {
-			mock.ExpectBegin().WillDelayFor(1 * time.Second)
-		} else {
-			mock.ExpectBegin().WillReturnError(sql.ErrConnDone)
-		}
-	}
-	m, err = mn.BeginTx(context.Background(), nil)
-	if err != sql.ErrConnDone {
-		t.Errorf("mtx.BeginTx() expected err: %v, got: %v", sql.ErrConnDone, err)
-	}
-	if len(m.tx) != 1 {
-		t.Errorf("mtx.BeginTx() len of tx = %v, want %v", len(m.tx), 1)
-	}
-
-	t.Log("All same error")
-	mdb, mocks, err = multiTestConnect(defaultTestConns)
-	if err != nil {
-		t.Fatal(err)
-	}
-	mn = MultiNode(mdb.All())
-
-	for _, mock := range mocks {
-		mock.ExpectBegin().WillReturnError(sql.ErrConnDone)
-	}
-	m, err = mn.BeginTx(context.Background(), nil)
-	if err != sql.ErrConnDone {
-		t.Errorf("Expected err: %v, got: %v", sql.ErrConnDone, err)
-	}
-	if m != nil {
-		t.Errorf("mtx.BeginTx() Res = %v, want %v", m.tx, nil)
-	}
-
-	t.Log("Different errors")
-	mdb, mocks, err = multiTestConnect(defaultTestConns)
-	if err != nil {
-		t.Fatal(err)
-	}
-	mn = MultiNode(mdb.All())
-
-	for i, mock := range mocks {
-		if i == 0 {
-			mock.ExpectBegin().WillReturnError(sql.ErrNoRows)
-		} else {
-			mock.ExpectBegin().WillReturnError(sql.ErrConnDone)
-		}
-	}
-	m, err = mn.BeginTx(context.Background(), nil)
-	me, ok := err.(*MultiError)
-	if !ok {
-		t.Errorf("mtx.BeginTx() expected err type: %T, got: %T", MultiError{}, err)
-	}
-	if len(me.Errors) != 3 {
-		t.Errorf("mtx.BeginTx() len of err = %v, want %v", len(me.Errors), 3)
-	}
-	if m != nil {
-		t.Errorf("mtx.BeginTx() Res = %v, want %v", m.tx, nil)
-	}
-
+func TestMultiNode_Begin(t *testing.T) {
 	t.Log("Begin wrapper")
-	mdb, mocks, err = multiTestConnect(defaultTestConns)
+	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mn = MultiNode(mdb.All())
+	mn := MultiNode(mdb.All())
 
 	for _, mock := range mocks {
 		mock.ExpectBegin()
 	}
-	m, err = mn.Begin()
+
+	m, err := mn.Begin()
 	if err != nil {
 		t.Error(err)
 	}
 	if len(m.tx) != 3 {
 		t.Errorf("mtx.BeginTx() len of tx = %v, want %v", len(m.tx), 3)
+	}
+}
+
+func BenchmarkMultiNode_txBeginners(b *testing.B) {
+	mdb, _, err := multiTestConnect(benchmarkConns)
+	if err != nil {
+		b.Fatal(err)
+	}
+	mn := MultiNode(mdb.All())
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		mn.txBeginners()
 	}
 }
