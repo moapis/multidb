@@ -3,6 +3,7 @@ package multidb
 import (
 	"context"
 	"database/sql"
+	"sync"
 )
 
 // MultiNode holds a slice of Nodes.
@@ -19,16 +20,14 @@ type MultiNode []*Node
 // It does not make much sense to run this method against multiple Nodes, as they are usually slaves.
 // This method is primarily included to implement boil.ContextExecutor.
 func (mn MultiNode) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	res, _, err := multiExec(ctx, nodes2Exec(mn), query, args...)
-	return res, err
+	return multiExec(ctx, nil, nodes2Exec(mn), query, args...)
 }
 
 // Exec runs ExecContext with context.Background().
 // It is highly recommended to stick with the contexted variant in parallel executions.
 // This method is primarily included to implement boil.Executor.
 func (mn MultiNode) Exec(query string, args ...interface{}) (sql.Result, error) {
-	res, _, err := multiExec(context.Background(), nodes2Exec(mn), query, args...)
-	return res, err
+	return multiExec(context.Background(), nil, nodes2Exec(mn), query, args...)
 }
 
 // QueryContext runs sql.DB.QueryContext on the Nodes in separate Go routines.
@@ -40,32 +39,28 @@ func (mn MultiNode) Exec(query string, args ...interface{}) (sql.Result, error) 
 //
 // Implements boil.ContextExecutor.
 func (mn MultiNode) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	rows, _, err := multiQuery(ctx, nodes2Exec(mn), query, args...)
-	return rows, err
+	return multiQuery(ctx, nil, nodes2Exec(mn), query, args...)
 }
 
 // Query runs QueryContext with context.Background().
 // It is highly recommended to stick with the contexted variant in parallel executions.
 // This method is primarily included to implement boil.Executor.
 func (mn MultiNode) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	rows, _, err := multiQuery(context.Background(), nodes2Exec(mn), query, args...)
-	return rows, err
+	return multiQuery(context.Background(), nil, nodes2Exec(mn), query, args...)
 }
 
 // QueryRowContext runs sql.DB.QueryRowContext on the Nodes in separate Go routines.
 // The first error free result is returned immediately.
 // If all resulting sql.Row objects contain an error, only the last Row containing an error is returned.
 func (mn MultiNode) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	row, _ := multiQueryRow(ctx, nodes2Exec(mn), query, args...)
-	return row
+	return multiQueryRow(ctx, nil, nodes2Exec(mn), query, args...)
 }
 
 // QueryRow runs QueryRowContext with context.Background().
 // It is highly recommended to stick with the contexted variant in parallel executions.
 // This method is primarily included to implement boil.Executor.
 func (mn MultiNode) QueryRow(query string, args ...interface{}) *sql.Row {
-	row, _ := multiQueryRow(context.Background(), nodes2Exec(mn), query, args...)
-	return row
+	return multiQueryRow(context.Background(), nil, nodes2Exec(mn), query, args...)
 }
 
 // BeginTx runs sql.DB.BeginTx on the Nodes in separate Go routines.
@@ -98,7 +93,12 @@ func (mn MultiNode) BeginTx(ctx context.Context, opts *sql.TxOptions) (*MultiTx,
 	}
 
 	var me MultiError
-	m := &MultiTx{tx: make([]*Tx, 0, len(mn))}
+
+	m := &MultiTx{
+		tx: make([]*Tx, 0, len(mn)),
+		wg: &sync.WaitGroup{},
+	}
+
 	for i := 0; i < len(mn); i++ {
 		select {
 		case err := <-ec:

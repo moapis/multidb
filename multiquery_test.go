@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -189,7 +190,7 @@ func Test_multiExec(t *testing.T) {
 	for _, mock := range mocks {
 		mock.ExpectExec(testQuery).WithArgs(1).WillReturnResult(sm.NewResult(2, 3))
 	}
-	got, done, err := multiExec(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+	got, err := multiExec(context.Background(), nil, nodes2Exec(mdb.All()), testQuery, 1)
 	if err != nil {
 		t.Error(err)
 	}
@@ -197,8 +198,6 @@ func Test_multiExec(t *testing.T) {
 	if err != nil || i != 3 {
 		t.Errorf("multiExec() Res = %v, want %v", i, 3)
 	}
-
-	<-done
 
 	t.Log("Healty delayed, two error")
 	mdb, mocks, err = multiTestConnect(defaultTestConns)
@@ -212,7 +211,11 @@ func Test_multiExec(t *testing.T) {
 			mock.ExpectExec(testQuery).WillReturnError(sql.ErrConnDone)
 		}
 	}
-	got, done, err = multiExec(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+
+	wg := &sync.WaitGroup{}
+	got, err = multiExec(context.Background(), wg, nodes2Exec(mdb.All()), testQuery, 1)
+	wg.Wait()
+
 	if err != nil {
 		t.Error(err)
 	}
@@ -220,8 +223,6 @@ func Test_multiExec(t *testing.T) {
 	if err != nil || i != 3 {
 		t.Errorf("multiExec() Res = %v, want %v", i, 3)
 	}
-
-	<-done
 
 	t.Log("All same error")
 	mdb, mocks, err = multiTestConnect(defaultTestConns)
@@ -231,15 +232,12 @@ func Test_multiExec(t *testing.T) {
 	for _, mock := range mocks {
 		mock.ExpectExec(testQuery).WillReturnError(sql.ErrNoRows)
 	}
-	got, done, err = multiExec(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+	got, err = multiExec(context.Background(), nil, nodes2Exec(mdb.All()), testQuery, 1)
 	if err != sql.ErrNoRows {
 		t.Errorf("exec() expected err: %v, got: %v", sql.ErrNoRows, err)
 	}
 	if got != nil {
 		t.Errorf("multiExec() Res = %v, want %v", got, nil)
-	}
-	if done != nil {
-		t.Errorf("multiExec() Done = %v, want %v", done, nil)
 	}
 
 	t.Log("Different errors")
@@ -254,7 +252,7 @@ func Test_multiExec(t *testing.T) {
 			mock.ExpectExec(testQuery).WillReturnError(sql.ErrConnDone)
 		}
 	}
-	got, done, err = multiExec(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+	got, err = multiExec(context.Background(), nil, nodes2Exec(mdb.All()), testQuery, 1)
 	if err == nil {
 		t.Errorf("multiExec() expected err got: %v", err)
 	}
@@ -264,9 +262,6 @@ func Test_multiExec(t *testing.T) {
 	}
 	if got != nil {
 		t.Errorf("multiExec() Res = %v, want %v", got, nil)
-	}
-	if done != nil {
-		t.Errorf("multiExec() Done = %v, want %v", done, nil)
 	}
 }
 
@@ -280,7 +275,7 @@ func Test_multiQuery(t *testing.T) {
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
 	}
-	rows, done, err := multiQuery(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+	rows, err := multiQuery(context.Background(), nil, nodes2Exec(mdb.All()), testQuery, 1)
 	if err != nil {
 		t.Error(err)
 	}
@@ -289,8 +284,6 @@ func Test_multiQuery(t *testing.T) {
 	if err = rows.Scan(&got); err != nil {
 		t.Fatal(err)
 	}
-
-	<-done
 
 	if got != want {
 		t.Errorf("multiQuery() R = %v, want %v", got, want)
@@ -308,7 +301,12 @@ func Test_multiQuery(t *testing.T) {
 			mock.ExpectQuery(testQuery).WillReturnError(sql.ErrConnDone)
 		}
 	}
-	rows, done, err = multiQuery(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+
+	wg := &sync.WaitGroup{}
+
+	rows, err = multiQuery(context.Background(), wg, nodes2Exec(mdb.All()), testQuery, 1)
+	wg.Wait()
+
 	if err != nil {
 		t.Error(err)
 	}
@@ -317,8 +315,6 @@ func Test_multiQuery(t *testing.T) {
 	if err = rows.Scan(&got); err != nil {
 		t.Fatal(err)
 	}
-
-	<-done
 
 	if got != want {
 		t.Errorf("multiQuery() R = %v, want %v", got, want)
@@ -332,15 +328,14 @@ func Test_multiQuery(t *testing.T) {
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WillReturnError(sql.ErrNoRows)
 	}
-	rows, done, err = multiQuery(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+	rows, err = multiQuery(context.Background(), wg, nodes2Exec(mdb.All()), testQuery, 1)
+	wg.Wait()
+
 	if err != sql.ErrNoRows {
 		t.Errorf("Expected err: %v, got: %v", sql.ErrNoRows, err)
 	}
 	if rows != nil {
 		t.Errorf("multiQuery() Res = %v, want %v", rows, nil)
-	}
-	if done != nil {
-		t.Errorf("multiQuery() Done = %v, want %v", done, nil)
 	}
 
 	t.Log("Different errors")
@@ -355,7 +350,7 @@ func Test_multiQuery(t *testing.T) {
 			mock.ExpectQuery(testQuery).WillReturnError(sql.ErrConnDone)
 		}
 	}
-	rows, done, err = multiQuery(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+	rows, err = multiQuery(context.Background(), nil, nodes2Exec(mdb.All()), testQuery, 1)
 	if err == nil {
 		t.Errorf("multiQuery() expected err got: %v", err)
 	}
@@ -365,9 +360,6 @@ func Test_multiQuery(t *testing.T) {
 	}
 	if rows != nil {
 		t.Errorf("multiQuery() Res = %v, want %v", rows, nil)
-	}
-	if done != nil {
-		t.Errorf("multiQuery() Done = %v, want %v", done, nil)
 	}
 }
 
@@ -381,7 +373,11 @@ func Test_multiQueryRow(t *testing.T) {
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
 	}
-	row, done := multiQueryRow(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+
+	wg := &sync.WaitGroup{}
+	row := multiQueryRow(context.Background(), wg, nodes2Exec(mdb.All()), testQuery, 1)
+	wg.Wait()
+
 	var got string
 	if err = row.Scan(&got); err != nil {
 		t.Fatal(err)
@@ -389,8 +385,6 @@ func Test_multiQueryRow(t *testing.T) {
 	if got != want {
 		t.Errorf("multiQueryRow() R = %v, want %v", got, want)
 	}
-
-	<-done
 
 	t.Log("All same error")
 	mdb, mocks, err = multiTestConnect(defaultTestConns)
@@ -400,7 +394,7 @@ func Test_multiQueryRow(t *testing.T) {
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WillReturnError(sql.ErrNoRows)
 	}
-	row, done = multiQueryRow(context.Background(), nodes2Exec(mdb.All()), testQuery, 1)
+	row = multiQueryRow(context.Background(), nil, nodes2Exec(mdb.All()), testQuery, 1)
 	got = ""
 	err = row.Scan(&got)
 	if err != sql.ErrNoRows {
@@ -409,7 +403,6 @@ func Test_multiQueryRow(t *testing.T) {
 	if got != "" {
 		t.Errorf("multiQueryRow() Res = %v, want %v", got, "")
 	}
-	<-done
 }
 
 func Benchmark_nodes2Exec(b *testing.B) {
@@ -475,8 +468,18 @@ func Benchmark_multiExec(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, done, _ := multiExec(context.Background(), ex, "")
-		<-done
+		multiExec(context.Background(), nil, ex, "")
+	}
+}
+
+func Benchmark_multiExec_wait(b *testing.B) {
+	ex := initBenchExecutors()
+	wg := &sync.WaitGroup{}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		multiExec(context.Background(), wg, ex, "")
+		wg.Wait()
 	}
 }
 
@@ -485,8 +488,18 @@ func Benchmark_multiQuery(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, done, _ := multiQuery(context.Background(), ex, "")
-		<-done
+		multiQuery(context.Background(), nil, ex, "")
+	}
+}
+
+func Benchmark_multiQuery_wait(b *testing.B) {
+	ex := initBenchExecutors()
+	wg := &sync.WaitGroup{}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		multiQuery(context.Background(), wg, ex, "")
+		wg.Wait()
 	}
 }
 
@@ -495,8 +508,18 @@ func Benchmark_multiQueryRow(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, done := multiQueryRow(context.Background(), ex, "")
-		<-done
+		multiQueryRow(context.Background(), nil, ex, "")
+	}
+}
+
+func Benchmark_multiQueryRow_wait(b *testing.B) {
+	ex := initBenchExecutors()
+	wg := &sync.WaitGroup{}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		multiQueryRow(context.Background(), wg, ex, "")
+		wg.Wait()
 	}
 }
 
@@ -506,12 +529,15 @@ go test -benchmem -bench .
 goos: linux
 goarch: amd64
 pkg: github.com/moapis/multidb
-Benchmark_nodes2Exec-8           1426524               907 ns/op            1792 B/op          1 allocs/op
-Benchmark_mtx2Exec-8             1195972              1015 ns/op            1792 B/op          1 allocs/op
-Benchmark_multiExec-8              35452             33873 ns/op            3888 B/op          6 allocs/op
-Benchmark_multiQuery-8             17300             68745 ns/op            2110 B/op          5 allocs/op
-Benchmark_multiQueryRow-8          17296             68638 ns/op             210 B/op          3 allocs/op
+Benchmark_nodes2Exec-8                   1376334               926 ns/op            1792 B/op          1 allocs/op
+Benchmark_mtx2Exec-8                     1200560              1009 ns/op            1792 B/op          1 allocs/op
+Benchmark_multiExec-8                      42184             28397 ns/op            3392 B/op          5 allocs/op
+Benchmark_multiExec_wait-8                 37711             32095 ns/op            3392 B/op          5 allocs/op
+Benchmark_multiQuery-8                     41403             29193 ns/op            3315 B/op          5 allocs/op
+Benchmark_multiQuery_wait-8                27154             44173 ns/op            3300 B/op          5 allocs/op
+Benchmark_multiQueryRow-8                  27008             43920 ns/op            1000 B/op          3 allocs/op
+Benchmark_multiQueryRow_wait-8             27111             44126 ns/op            1000 B/op          3 allocs/op
 PASS
-ok      github.com/moapis/multidb       14.299s
+ok      github.com/moapis/multidb       18.840s
 
 */

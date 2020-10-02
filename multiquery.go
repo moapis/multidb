@@ -73,125 +73,134 @@ func mtx2Exec(mtx []*Tx) []executor {
 	return xs
 }
 
-func multiExec(ctx context.Context, xs []executor, query string, args ...interface{}) (sql.Result, chan struct{}, error) {
-	rc := make(chan sql.Result, len(xs))
-	ec := make(chan error, len(xs))
+func multiExec(ctx context.Context, wg *sync.WaitGroup, xs []executor, query string, args ...interface{}) (sql.Result, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-	var wg sync.WaitGroup
-	wg.Add(len(xs))
-	for _, x := range xs {
-		go func(x executor) {
-			res, err := x.ExecContext(ctx, query, args...)
-			if err != nil { // Make sure only one of them is returned
-				ec <- err
-			} else {
-				rc <- res
-			}
-			wg.Done()
-		}(x)
+	type result struct {
+		res sql.Result
+		err error
 	}
 
-	done := make(chan struct{}) // Done signals the caller that all remaining rows are properly closed
-	// Close channels when all query routines completed
-	go func() {
-		wg.Wait()
-		close(ec)
-		close(rc)
-		close(done)
-	}()
+	rc := make(chan result, len(xs))
 
-	if res, ok := <-rc; ok {
-		return res, done, nil
+	if wg != nil {
+		wg.Add(len(xs))
+	}
+
+	for _, x := range xs {
+		go func(x executor) {
+			var r result
+			r.res, r.err = x.ExecContext(ctx, query, args...)
+			rc <- r
+
+			if wg != nil {
+				wg.Done()
+			}
+
+		}(x)
 	}
 
 	var me MultiError
-	for err := range ec {
-		me.append(err)
+
+	for i := len(xs); i > 0; i-- {
+		r := <-rc
+
+		if r.err == nil {
+			return r.res, nil
+		}
+
+		me.append(r.err)
 	}
-	return nil, nil, me.check()
+
+	return nil, me.check()
 }
 
-func multiQuery(ctx context.Context, xs []executor, query string, args ...interface{}) (*sql.Rows, chan struct{}, error) {
-	rc := make(chan *sql.Rows)
-	ec := make(chan error, len(xs))
-
-	var wg sync.WaitGroup
-	wg.Add(len(xs))
-	for _, x := range xs {
-		go func(x executor) {
-			rows, err := x.QueryContext(ctx, query, args...)
-			if err != nil { // Make sure only one of them is returned
-				ec <- err
-			} else {
-				rc <- rows
-			}
-			wg.Done()
-		}(x)
+func multiQuery(ctx context.Context, wg *sync.WaitGroup, xs []executor, query string, args ...interface{}) (*sql.Rows, error) {
+	type result struct {
+		rows *sql.Rows
+		err  error
 	}
 
-	// Close channels when all query routines completed
-	go func() {
-		wg.Wait()
-		close(ec)
-		close(rc)
-	}()
+	// Buffered channel works ~40% faster, regardless of draining.
+	rc := make(chan result, len(xs))
 
-	rows, ok := <-rc
-	if ok { // ok will be false if channel closed before any rows
-		done := make(chan struct{}) // Done signals the caller that all remaining rows are properly closed
-		go func() {
-			for rows := range rc { // Drain channel and close unused Rows
-				if rows != nil {
-					rows.Close()
+	if wg != nil {
+		wg.Add(len(xs))
+	}
+
+	for i := 0; i < len(xs); i++ {
+		go func(x executor) {
+			var r result
+			r.rows, r.err = x.QueryContext(ctx, query, args...)
+			rc <- r
+
+			if wg != nil {
+				wg.Done()
+			}
+		}(xs[i])
+	}
+
+	var me MultiError
+
+	for i := len(xs); i > 0; i-- {
+		r := <-rc
+
+		if r.err == nil {
+
+			// Drain channel and close unused Rows
+			go func(i int) {
+				for ; i > 0; i-- {
+					if r := <-rc; r.rows != nil {
+						r.rows.Close()
+					}
 				}
-			}
-			close(done)
-		}()
-		return rows, done, nil
+			}(i)
+
+			return r.rows, nil
+		}
+
+		me.append(r.err)
 	}
 
-	var me MultiError
-	for err := range ec {
-		me.append(err)
-	}
-	return nil, nil, me.check()
+	return nil, me.check()
 }
 
-func multiQueryRow(ctx context.Context, xs []executor, query string, args ...interface{}) (row *sql.Row, done chan struct{}) {
-	rc := make(chan *sql.Row)
+func multiQueryRow(ctx context.Context, wg *sync.WaitGroup, xs []executor, query string, args ...interface{}) (row *sql.Row) {
+	rc := make(chan *sql.Row, len(xs))
 
-	var wg sync.WaitGroup
-	wg.Add(len(xs))
+	if wg != nil {
+		wg.Add(len(xs))
+	}
+
 	for _, x := range xs {
 		go func(x executor) {
 			rc <- x.QueryRowContext(ctx, query, args...)
-			wg.Done()
+
+			if wg != nil {
+				wg.Done()
+			}
 		}(x)
 	}
 
-	// Close channels when all query routines completed
-	go func() {
-		wg.Wait()
-		close(rc)
-	}()
+	for i := len(xs); i > 0; i-- {
+		row = <-rc
 
-	done = make(chan struct{}) // Done signals the caller that all remaining row are properly closed
-	defer func() {
-		go func() {
-			for row := range rc { // Drain channel and close unused Row
-				if row != nil {
-					row.Scan(&sql.RawBytes{}) // hack to trigger Rows.Close()
+		if row != nil && row.Err() == nil {
+
+			// Drain channel and close unused Rows
+			go func() {
+				for ; i > 0; i-- {
+					if row := <-rc; row != nil {
+						row.Scan(&sql.RawBytes{}) // hack to trigger Rows.Close()
+					}
 				}
-			}
-			close(done)
-		}()
-	}()
+			}()
 
-	for row = range rc {
-		if row.Err() == nil {
-			return row, done
+			break
 		}
+
 	}
 
-	return row, done
+	return row
 }
