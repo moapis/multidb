@@ -273,7 +273,7 @@ func Test_electMaster(t *testing.T) {
 	defer cancel()
 
 	got, err = electMaster(ctx, nodes)
-	_, ok := err.(MultiError)
+	_, ok := err.(*MultiError)
 	if !ok {
 		t.Errorf("electMaster() err = %T, want %T", err, MultiError{})
 	}
@@ -649,7 +649,7 @@ func TestMultiDB_MultiNode(t *testing.T) {
 
 func TestMultiDB_MultiTx(t *testing.T) {
 	t.Log("All nodes healthy")
-	mdb, mocks, err := multiTestConnect()
+	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}

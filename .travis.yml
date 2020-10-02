@@ -10,6 +10,7 @@ install:
 
 script:
   - go test -race -coverprofile=codecov.out -covermode=atomic
+  - go test -benchmem -bench . # Just a quick check if the benchmarks are valid
 
 after_script:
   - bash <(curl -s https://codecov.io/bash) -f codecov.out

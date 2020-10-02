@@ -17,8 +17,115 @@ func _() boil.ContextExecutor   { return &MultiTx{} }
 func _() boil.Transactor        { return &MultiTx{} }
 func _() boil.ContextTransactor { return &MultiTx{} }
 
+func Test_beginMultiTx(t *testing.T) {
+	t.Log("All nodes healthy")
+	mdb, mocks, err := multiTestConnect(defaultTestConns)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mn := MultiNode(mdb.All())
+
+	for _, mock := range mocks {
+		mock.ExpectBegin()
+	}
+	txs, err := beginMultiTx(context.Background(), nil, mn.txBeginners()...)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(txs) != 3 {
+		t.Errorf("mtx.BeginTx() len of tx = %v, want %v", len(txs), 3)
+	}
+
+	t.Log("Healty delayed, two error")
+	mdb, mocks, err = multiTestConnect(defaultTestConns)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mn = MultiNode(mdb.All())
+
+	for i, mock := range mocks {
+		if i == 0 {
+			mock.ExpectBegin().WillDelayFor(1 * time.Second)
+		} else {
+			mock.ExpectBegin().WillReturnError(sql.ErrConnDone)
+		}
+	}
+	txs, err = beginMultiTx(context.Background(), nil, mn.txBeginners()...)
+	if err != sql.ErrConnDone {
+		t.Errorf("mtx.BeginTx() expected err: %v, got: %v", sql.ErrConnDone, err)
+	}
+	if len(txs) != 1 {
+		t.Errorf("mtx.BeginTx() len of tx = %v, want %v", len(txs), 1)
+	}
+
+	t.Log("All same error")
+	mdb, mocks, err = multiTestConnect(defaultTestConns)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mn = MultiNode(mdb.All())
+
+	for _, mock := range mocks {
+		mock.ExpectBegin().WillReturnError(sql.ErrConnDone)
+	}
+	txs, err = beginMultiTx(context.Background(), nil, mn.txBeginners()...)
+	if err != sql.ErrConnDone {
+		t.Errorf("Expected err: %v, got: %v", sql.ErrConnDone, err)
+	}
+	if txs != nil {
+		t.Errorf("mtx.BeginTx() Res = %v, want %v", txs, nil)
+	}
+
+	t.Log("Different errors")
+	mdb, mocks, err = multiTestConnect(defaultTestConns)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mn = MultiNode(mdb.All())
+
+	for i, mock := range mocks {
+		if i == 0 {
+			mock.ExpectBegin().WillReturnError(sql.ErrNoRows)
+		} else {
+			mock.ExpectBegin().WillReturnError(sql.ErrConnDone)
+		}
+	}
+	txs, err = beginMultiTx(context.Background(), nil, mn.txBeginners()...)
+	me, ok := err.(*MultiError)
+	if !ok {
+		t.Errorf("mtx.BeginTx() expected err type: %T, got: %T", MultiError{}, err)
+	}
+	if len(me.Errors) != 3 {
+		t.Errorf("mtx.BeginTx() len of err = %v, want %v", len(me.Errors), 3)
+	}
+	if txs != nil {
+		t.Errorf("mtx.BeginTx() Res = %v, want %v", txs, nil)
+	}
+}
+
+// benchTxBeginner is simple (no-op) txBeginner implementation
+type benchTxBeginner struct{}
+
+func (*benchTxBeginner) BeginTx(context.Context, *sql.TxOptions) (*Tx, error) {
+	return &Tx{}, nil
+}
+
+func Benchmark_beginMultiTx(b *testing.B) {
+	tbs := make([]txBeginner, benchmarkConns)
+
+	for i := 0; i < benchmarkConns; i++ {
+		tbs[i] = &benchTxBeginner{}
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		beginMultiTx(context.Background(), nil, tbs...)
+	}
+}
+
 func prepareTestTx() (*MultiTx, []sm.Sqlmock, error) {
-	mdb, mocks, err := multiTestConnect()
+	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -229,7 +336,7 @@ func TestMultiTx_Rollback(t *testing.T) {
 		}
 	}
 	err = tx.Rollback()
-	me, ok := err.(MultiError)
+	me, ok := err.(*MultiError)
 	if !ok {
 		t.Errorf("mtx.Rollback() expected err type: %T, got: %T", MultiError{}, err)
 	}
@@ -282,7 +389,7 @@ func TestMultiTx_Commit(t *testing.T) {
 		}
 	}
 	err = tx.Commit()
-	me, ok := err.(MultiError)
+	me, ok := err.(*MultiError)
 	if !ok {
 		t.Errorf("mtx.Commit() expected err type: %T, got: %T", MultiError{}, err)
 	}
