@@ -7,7 +7,6 @@ package multidb
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"log"
 	"os"
 	"reflect"
@@ -77,128 +76,12 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func Test_newNodeStats(t *testing.T) {
-	type args struct {
-		statsLen int
-		maxFails int
-	}
-	tt := struct {
-		name string
-		args args
-		want nodeStats
-	}{
-		"newNodeStats",
-		args{
-			statsLen: 1000,
-			maxFails: 50,
-		},
-		nodeStats{
-			maxFails: 50,
-			fails:    make([]bool, 1000),
-		},
-	}
-
-	t.Run(tt.name, func(t *testing.T) {
-		got := newNodeStats(tt.args.statsLen, tt.args.maxFails)
-		if !reflect.DeepEqual(&got, &tt.want) {
-			t.Errorf("newNodeStats() = %v, want %v", &got, &tt.want)
-		}
-		got.mtx.Lock()
-		got.mtx.Unlock()
-	})
-}
-
-func Test_nodeStats_reset(t *testing.T) {
-	got := newNodeStats(10, 50)
-	for i := range got.fails {
-		got.fails[i] = true
-	}
-	got.reset()
-	want := newNodeStats(10, 50)
-	if !reflect.DeepEqual(&got, &want) {
-		t.Errorf("newNodeStats() = %v, want %v", &got, &want)
-	}
-	got.mtx.Lock()
-	got.mtx.Unlock()
-}
-
-func Test_nodeStats_failed(t *testing.T) {
-	confs := []int{0, 2, 3, 4, -1}
-	type args struct {
-		state bool
-	}
-	tests := []struct {
-		name  string
-		args  args
-		wants []bool
-	}{
-		{
-			"0/4",
-			args{false},
-			[]bool{false, false, false, false, false},
-		},
-		{
-			"Up to 1/4",
-			args{true},
-			[]bool{true, false, false, false, false},
-		},
-		{
-			"Up to 2/4",
-			args{true},
-			[]bool{true, false, false, false, false},
-		},
-		{
-			"Up to 3/4",
-			args{true},
-			[]bool{true, true, false, false, false},
-		},
-		{
-			"Up to 4/4 and wrap",
-			args{true},
-			[]bool{true, true, true, false, false},
-		},
-		{
-			"Down to 3/4",
-			args{false},
-			[]bool{true, true, false, false, false},
-		},
-		{
-			"Down to 2/4",
-			args{false},
-			[]bool{true, false, false, false, false},
-		},
-	}
-	// Run with 0 conf, to check for panic
-	s := newNodeStats(0, 0)
-	got := s.failed(true)
-	if got != false {
-		t.Errorf("nodeStats.failed() = %v, want %v", got, false)
-	}
-
-	for n, c := range confs {
-		s := newNodeStats(4, c)
-		for _, tt := range tests {
-			t.Run(fmt.Sprintf("%d: %v", c, tt.name), func(t *testing.T) {
-				got := s.failed(tt.args.state)
-				if got != tt.wants[n] {
-					t.Errorf("nodeStats.failed() = %v, want %v", got, tt.wants[n])
-				}
-				s.mtx.Lock()
-				s.mtx.Unlock()
-			})
-		}
-	}
-}
-
-// sql.Open(sqlite3,testDSN
-
 func Test_newNode(t *testing.T) {
 	type args struct {
 		conf           testConfig
 		dataSourceName string
 		statsLen       int
 		maxFails       int
-		reconnectWait  time.Duration
 	}
 	tests := []struct {
 		name string
@@ -212,22 +95,16 @@ func Test_newNode(t *testing.T) {
 				dataSourceName: testDSN,
 				statsLen:       1000,
 				maxFails:       22,
-				reconnectWait:  5 * time.Second,
 			},
 			&Node{
-				nodeStats: nodeStats{
-					maxFails: 22,
-					fails:    make([]bool, 1000),
-				},
 				Configurator:   defaultTestConfig(),
 				dataSourceName: testDSN,
-				reconnectWait:  5 * time.Second,
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := newNode(tt.args.conf, tt.args.dataSourceName, tt.args.statsLen, tt.args.maxFails, tt.args.reconnectWait); !reflect.DeepEqual(got, tt.want) {
+			if got := newNode(tt.args.conf, tt.args.dataSourceName, tt.args.statsLen, tt.args.maxFails); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("newNode() = %v, want %v", got, tt.want)
 			}
 		})
@@ -239,7 +116,6 @@ func TestNode_Open(t *testing.T) {
 		conf               drivers.Configurator
 		dataSourceName     string
 		statsLen, maxFails int
-		reconnectWait      time.Duration
 	}
 	tests := []struct {
 		name    string
@@ -253,7 +129,6 @@ func TestNode_Open(t *testing.T) {
 				dataSourceName: testDSN,
 				statsLen:       1000,
 				maxFails:       22,
-				reconnectWait:  5 * time.Second,
 			},
 			false,
 		},
@@ -264,7 +139,6 @@ func TestNode_Open(t *testing.T) {
 				dataSourceName: testDSN,
 				statsLen:       1000,
 				maxFails:       22,
-				reconnectWait:  5 * time.Second,
 			},
 			true,
 		},
@@ -275,14 +149,13 @@ func TestNode_Open(t *testing.T) {
 				dataSourceName: "bar",
 				statsLen:       1000,
 				maxFails:       22,
-				reconnectWait:  5 * time.Second,
 			},
 			true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := newNode(tt.args.conf, tt.args.dataSourceName, tt.args.statsLen, tt.args.maxFails, tt.args.reconnectWait)
+			n := newNode(tt.args.conf, tt.args.dataSourceName, tt.args.statsLen, tt.args.maxFails)
 			if tt.name == ErrAlreadyOpen {
 				if err := n.Open(); err != nil {
 					t.Fatal(err)
@@ -305,12 +178,12 @@ func TestNode_Close(t *testing.T) {
 	}{
 		{
 			"Open",
-			newNode(defaultTestConfig(), testDSN, 1000, 22, 0),
+			newNode(defaultTestConfig(), testDSN, 1000, 22),
 			false,
 		},
 		{
 			"Closed",
-			newNode(defaultTestConfig(), testDSN, 1000, 22, 0),
+			newNode(defaultTestConfig(), testDSN, 1000, 22),
 			true,
 		},
 	}
@@ -330,56 +203,8 @@ func TestNode_Close(t *testing.T) {
 	}
 }
 
-func TestNode_CheckErr(t *testing.T) {
-	n := newNode(defaultTestConfig(), testDSN, 10, 1, 0)
-	if err := n.Open(); err != nil {
-		t.Fatal(n)
-	}
-
-	whiteErrs := []error{
-		nil,
-		sql.ErrNoRows,
-		sql.ErrTxDone,
-		testError{},
-	}
-	// white listed errors, should not close connection
-	for _, w := range whiteErrs {
-		err := n.CheckErr(w)
-		time.Sleep(time.Millisecond)
-		if err != w {
-			t.Errorf("Node.CheckErr() Err = %v, want %v", err, w)
-		}
-
-		n.mtx.RLock()
-		if n.DB == nil {
-			t.Errorf("Node.CheckErr() DB = %v, want %v", n.DB, "DB")
-		}
-		n.mtx.RUnlock()
-	}
-
-	// First connection error, should not close connection
-	err := n.CheckErr(sql.ErrConnDone)
-	time.Sleep(time.Millisecond)
-	if err != sql.ErrConnDone {
-		t.Errorf("Node.CheckErr() Err = %v, want %v", err, sql.ErrConnDone)
-	}
-
-	n.mtx.RLock()
-	if n.DB == nil {
-		t.Errorf("Node.CheckErr() DB = %v, want %v", n.DB, "DB")
-	}
-	n.mtx.RUnlock()
-
-	// Here the connection should be closed
-	err = n.CheckErr(sql.ErrConnDone)
-	time.Sleep(time.Millisecond)
-	if err != sql.ErrConnDone {
-		t.Errorf("Node.CheckErr() Err = %v, want %v", err, sql.ErrConnDone)
-	}
-}
-
 func TestNode_Exec(t *testing.T) {
-	n := newNode(defaultTestConfig(), testDSN, 10, 0, 0)
+	n := newNode(defaultTestConfig(), testDSN, 10, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -397,7 +222,7 @@ func TestNode_Exec(t *testing.T) {
 }
 
 func TestNode_Query(t *testing.T) {
-	n := newNode(defaultTestConfig(), testDSN, 10, 0, 0)
+	n := newNode(defaultTestConfig(), testDSN, 10, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -420,7 +245,7 @@ func TestNode_Query(t *testing.T) {
 }
 
 func TestNode_QueryRow(t *testing.T) {
-	n := newNode(defaultTestConfig(), testDSN, 10, 0, 0)
+	n := newNode(defaultTestConfig(), testDSN, 10, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -439,7 +264,7 @@ func TestNode_QueryRow(t *testing.T) {
 }
 
 func TestNode_ExecContext(t *testing.T) {
-	n := newNode(defaultTestConfig(), testDSN, 10, 0, 0)
+	n := newNode(defaultTestConfig(), testDSN, 10, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -457,7 +282,7 @@ func TestNode_ExecContext(t *testing.T) {
 }
 
 func TestNode_QueryContext(t *testing.T) {
-	n := newNode(defaultTestConfig(), testDSN, 10, 0, 0)
+	n := newNode(defaultTestConfig(), testDSN, 10, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -480,7 +305,7 @@ func TestNode_QueryContext(t *testing.T) {
 }
 
 func TestNode_QueryRowContext(t *testing.T) {
-	n := newNode(defaultTestConfig(), testDSN, 10, 0, 0)
+	n := newNode(defaultTestConfig(), testDSN, 10, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -499,7 +324,7 @@ func TestNode_QueryRowContext(t *testing.T) {
 }
 
 func TestNode_Begin(t *testing.T) {
-	n := newNode(defaultTestConfig(), testDSN, 10, 0, 0)
+	n := newNode(defaultTestConfig(), testDSN, 10, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -516,7 +341,7 @@ func TestNode_Begin(t *testing.T) {
 }
 
 func TestNode_BeginTx(t *testing.T) {
-	n := newNode(defaultTestConfig(), testDSN, 10, 0, 0)
+	n := newNode(defaultTestConfig(), testDSN, 10, 0)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -624,7 +449,7 @@ func Test_availableNodes(t *testing.T) {
 	exp := make([]*Node, 10)
 	arg := make([]*Node, 10)
 	for i := 0; i < 10; i++ {
-		n := newNode(defaultTestConfig(), testDSN, 10, 0, 0)
+		n := newNode(defaultTestConfig(), testDSN, 10, 0)
 		if err := n.Open(); err != nil {
 			t.Fatal(err)
 		}

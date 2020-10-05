@@ -10,7 +10,6 @@ import (
 	"errors"
 	"sort"
 	"sync"
-	"time"
 
 	"github.com/moapis/multidb/drivers"
 )
@@ -20,72 +19,21 @@ const (
 	ErrAlreadyOpen = "Node already open"
 )
 
-type nodeStats struct {
-	maxFails int
-	fails    []bool
-	pos      int
-	mtx      sync.Mutex
-}
-
-func newNodeStats(statsLen, maxFails int) nodeStats {
-	return nodeStats{
-		maxFails: maxFails,
-		fails:    make([]bool, statsLen),
-	}
-}
-
-// reset the success stats, needed on reconnect
-// total usage remains intact
-func (s *nodeStats) reset() {
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-
-	for i := 0; i < len(s.fails); i++ {
-		s.fails[i] = false
-	}
-}
-
-// failed counts a failure and calculates if the node is failed
-func (s *nodeStats) failed(state bool) bool {
-	if s.maxFails < 0 || len(s.fails) == 0 {
-		return false
-	}
-
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-
-	s.fails[s.pos] = state
-	var count int
-	for _, b := range s.fails {
-		if b {
-			count++
-		}
-	}
-	if s.pos++; s.pos >= len(s.fails) {
-		s.pos = 0
-	}
-	return count > s.maxFails
-}
-
 // Node represents a database server connection.
 // Node Implements boil.ContextExecutor
 type Node struct {
-	nodeStats
 	drivers.Configurator
 	dataSourceName string
 	// DB holds the raw *sql.DB for direct access.
 	// Errors produced by calling DB directly are not monitored by this package.
-	DB            *sql.DB
-	reconnectWait time.Duration
-	mtx           sync.RWMutex
+	DB  *sql.DB
+	mtx sync.RWMutex
 }
 
-func newNode(conf drivers.Configurator, dsn string, statsLen, maxFails int, reconnectWait time.Duration) *Node {
+func newNode(conf drivers.Configurator, dsn string, statsLen, maxFails int) *Node {
 	return &Node{
-		nodeStats:      newNodeStats(statsLen, maxFails),
 		Configurator:   conf,
 		dataSourceName: dsn,
-		reconnectWait:  reconnectWait,
 	}
 }
 
@@ -100,7 +48,6 @@ func (n *Node) Open() (err error) {
 	}
 
 	n.DB, err = sql.Open(n.DriverName(), n.dataSourceName)
-	n.reset()
 
 	return err
 }
@@ -121,45 +68,13 @@ func (n *Node) Close() error {
 	return err
 }
 
-// InUse get the InUse counter from db.Stats.
-// Returns -1 in case db is unavailable.
-func (n *Node) InUse() int {
-	n.mtx.RLock()
-	defer n.mtx.RUnlock()
-
-	if n.DB == nil {
-		return -1
-	}
-	return n.DB.Stats().InUse
-}
-
-// CheckErr updates the statistics. If the error is nil or whitelisted, success is recorded.
-// Any other case constitutes an error and failure is recorded.
-//
-// This method is already called by each database call method and need to be used in most cases.
-// It is exported for use in extending libraries which need use struct embedding
-// and want to overload Node methods, while still keeping statistics up-to-date.
-func (n *Node) CheckErr(err error) error {
-	switch {
-	case err == nil:
-		go n.failed(false)
-	case errors.Is(err, sql.ErrNoRows) || errors.Is(err, sql.ErrTxDone) || errors.Is(err, context.Canceled):
-		go n.failed(false)
-	case n.WhiteList(err):
-		go n.failed(false)
-	default:
-		go n.failed(true)
-	}
-	return err
-}
-
 // ExecContext wrapper around sql.DB.Exec.
 func (n *Node) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	n.mtx.RLock()
 	res, err := n.DB.ExecContext(ctx, query, args...)
 	n.mtx.RUnlock()
 
-	return res, n.CheckErr(err)
+	return res, err
 }
 
 // Exec wrapper around sql.DB.ExecContext,
@@ -174,7 +89,7 @@ func (n *Node) QueryContext(ctx context.Context, query string, args ...interface
 	rows, err := n.DB.QueryContext(ctx, query, args...)
 	n.mtx.RUnlock()
 
-	return rows, n.CheckErr(err)
+	return rows, err
 }
 
 // Query wrapper around sql.DB.QueryRowContext,
@@ -188,8 +103,6 @@ func (n *Node) QueryRowContext(ctx context.Context, query string, args ...interf
 	n.mtx.RLock()
 	row := n.DB.QueryRowContext(ctx, query, args...)
 	n.mtx.RUnlock()
-
-	n.CheckErr(row.Err())
 
 	return row
 }
@@ -209,7 +122,7 @@ func (n *Node) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 	tx, err := n.DB.BeginTx(ctx, opts)
 	n.mtx.RUnlock()
 
-	return &Tx{n, tx}, n.CheckErr(err)
+	return &Tx{tx}, err
 }
 
 // Begin opens a new *sql.Tx on the Node.
