@@ -227,7 +227,6 @@ func Test_electMaster(t *testing.T) {
 		}
 		nodes = append(nodes, node)
 	}
-	nodes = append(nodes, nil)
 
 	q := defaultTestConfig().MasterQuery()
 	mocks["master"].ExpectQuery(q).WillDelayFor(100 * time.Millisecond).WillReturnRows(sm.NewRows([]string{"master"}).AddRow(true))
