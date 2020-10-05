@@ -52,20 +52,9 @@ func (n *Node) Open() (err error) {
 	return err
 }
 
-// Close the current node and make it unavailable
+// Close the current DB node
 func (n *Node) Close() error {
-	n.mtx.Lock()
-	defer n.mtx.Unlock()
-
-	var err error
-	if n.DB == nil {
-		err = sql.ErrConnDone
-	} else {
-		err = n.DB.Close()
-	}
-
-	n.DB = nil
-	return err
+	return n.DB.Close()
 }
 
 // ExecContext wrapper around sql.DB.Exec.
@@ -145,13 +134,11 @@ func (ent entries) Swap(i, j int)      { ent[i], ent[j] = ent[j], ent[i] }
 func newEntries(nodes []*Node) entries {
 	var ent entries
 	for _, n := range nodes {
-		if n != nil && n.DB != nil {
-			st := n.DB.Stats()
-			ent = append(ent, entry{
-				node:   n,
-				factor: float32(st.InUse) / float32(st.MaxOpenConnections),
-			})
-		}
+		st := n.DB.Stats()
+		ent = append(ent, entry{
+			node:   n,
+			factor: float32(st.InUse) / float32(st.MaxOpenConnections),
+		})
 	}
 	return ent
 }

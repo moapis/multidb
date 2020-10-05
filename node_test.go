@@ -160,35 +160,13 @@ func TestNode_Open(t *testing.T) {
 }
 
 func TestNode_Close(t *testing.T) {
-	tests := []struct {
-		name    string
-		node    *Node
-		wantErr bool
-	}{
-		{
-			"Open",
-			newNode(defaultTestConfig(), testDSN),
-			false,
-		},
-		{
-			"Closed",
-			newNode(defaultTestConfig(), testDSN),
-			true,
-		},
+	node := newNode(defaultTestConfig(), testDSN)
+	if err := node.Open(); err != nil {
+		t.Fatal(err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.name == "Open" {
-				if err := tt.node.Open(); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if err := tt.node.Close(); (err != nil) != tt.wantErr {
-				t.Errorf("Node.Close() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-		tt.node.mtx.Lock()
-		tt.node.mtx.Unlock()
+
+	if err := node.Close(); err != nil {
+		t.Errorf("Node.Close() error = %v, wantErr %v", err, false)
 	}
 }
 
@@ -377,7 +355,7 @@ func Test_newEntries(t *testing.T) {
 			node,
 			float32(i) / 10.0,
 		})
-		nodes = append(nodes, node, nil, &Node{DB: nil}) // nil to add some garbage
+		nodes = append(nodes, node) // nil to add some garbage
 	}
 	wg.Wait() // Allow for the exec go-routines to fire.
 	got := newEntries(nodes)

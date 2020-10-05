@@ -96,17 +96,13 @@ func electMaster(ctx context.Context, nodes []*Node) (*Node, error) {
 		err      error
 		isMaster bool
 	}
-	var available []*Node
-	for _, n := range nodes {
-		if n != nil && n.DB != nil {
-			available = append(available, n)
-		}
-	}
-	if len(available) == 0 {
+
+	if len(nodes) == 0 {
 		return nil, errors.New(ErrNoNodes)
 	}
-	rc := make(chan result, len(available))
-	for _, n := range available {
+
+	rc := make(chan result, len(nodes))
+	for _, n := range nodes {
 		go func(n *Node) {
 			res := result{
 				node: n,
@@ -118,7 +114,7 @@ func electMaster(ctx context.Context, nodes []*Node) (*Node, error) {
 
 	var errs []error
 
-	for i := 0; i < len(available); i++ {
+	for i := 0; i < len(nodes); i++ {
 		res := <-rc
 		if res.isMaster {
 			return res.node, nil
