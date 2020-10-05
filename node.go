@@ -30,7 +30,7 @@ type Node struct {
 	mtx sync.RWMutex
 }
 
-func newNode(conf drivers.Configurator, dsn string, statsLen, maxFails int) *Node {
+func newNode(conf drivers.Configurator, dsn string) *Node {
 	return &Node{
 		Configurator:   conf,
 		dataSourceName: dsn,

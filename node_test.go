@@ -80,8 +80,6 @@ func Test_newNode(t *testing.T) {
 	type args struct {
 		conf           testConfig
 		dataSourceName string
-		statsLen       int
-		maxFails       int
 	}
 	tests := []struct {
 		name string
@@ -93,8 +91,6 @@ func Test_newNode(t *testing.T) {
 			args{
 				conf:           defaultTestConfig(),
 				dataSourceName: testDSN,
-				statsLen:       1000,
-				maxFails:       22,
 			},
 			&Node{
 				Configurator:   defaultTestConfig(),
@@ -104,7 +100,7 @@ func Test_newNode(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := newNode(tt.args.conf, tt.args.dataSourceName, tt.args.statsLen, tt.args.maxFails); !reflect.DeepEqual(got, tt.want) {
+			if got := newNode(tt.args.conf, tt.args.dataSourceName); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("newNode() = %v, want %v", got, tt.want)
 			}
 		})
@@ -113,9 +109,8 @@ func Test_newNode(t *testing.T) {
 
 func TestNode_Open(t *testing.T) {
 	type args struct {
-		conf               drivers.Configurator
-		dataSourceName     string
-		statsLen, maxFails int
+		conf           drivers.Configurator
+		dataSourceName string
 	}
 	tests := []struct {
 		name    string
@@ -127,8 +122,6 @@ func TestNode_Open(t *testing.T) {
 			args{
 				conf:           defaultTestConfig(),
 				dataSourceName: testDSN,
-				statsLen:       1000,
-				maxFails:       22,
 			},
 			false,
 		},
@@ -137,8 +130,6 @@ func TestNode_Open(t *testing.T) {
 			args{
 				conf:           defaultTestConfig(),
 				dataSourceName: testDSN,
-				statsLen:       1000,
-				maxFails:       22,
 			},
 			true,
 		},
@@ -147,15 +138,13 @@ func TestNode_Open(t *testing.T) {
 			args{
 				conf:           testConfig{dn: "foo"},
 				dataSourceName: "bar",
-				statsLen:       1000,
-				maxFails:       22,
 			},
 			true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := newNode(tt.args.conf, tt.args.dataSourceName, tt.args.statsLen, tt.args.maxFails)
+			n := newNode(tt.args.conf, tt.args.dataSourceName)
 			if tt.name == ErrAlreadyOpen {
 				if err := n.Open(); err != nil {
 					t.Fatal(err)
@@ -178,12 +167,12 @@ func TestNode_Close(t *testing.T) {
 	}{
 		{
 			"Open",
-			newNode(defaultTestConfig(), testDSN, 1000, 22),
+			newNode(defaultTestConfig(), testDSN),
 			false,
 		},
 		{
 			"Closed",
-			newNode(defaultTestConfig(), testDSN, 1000, 22),
+			newNode(defaultTestConfig(), testDSN),
 			true,
 		},
 	}
@@ -204,7 +193,7 @@ func TestNode_Close(t *testing.T) {
 }
 
 func TestNode_Exec(t *testing.T) {
-	n := newNode(defaultTestConfig(), testDSN, 10, 0)
+	n := newNode(defaultTestConfig(), testDSN)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +211,7 @@ func TestNode_Exec(t *testing.T) {
 }
 
 func TestNode_Query(t *testing.T) {
-	n := newNode(defaultTestConfig(), testDSN, 10, 0)
+	n := newNode(defaultTestConfig(), testDSN)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +234,7 @@ func TestNode_Query(t *testing.T) {
 }
 
 func TestNode_QueryRow(t *testing.T) {
-	n := newNode(defaultTestConfig(), testDSN, 10, 0)
+	n := newNode(defaultTestConfig(), testDSN)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +253,7 @@ func TestNode_QueryRow(t *testing.T) {
 }
 
 func TestNode_ExecContext(t *testing.T) {
-	n := newNode(defaultTestConfig(), testDSN, 10, 0)
+	n := newNode(defaultTestConfig(), testDSN)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +271,7 @@ func TestNode_ExecContext(t *testing.T) {
 }
 
 func TestNode_QueryContext(t *testing.T) {
-	n := newNode(defaultTestConfig(), testDSN, 10, 0)
+	n := newNode(defaultTestConfig(), testDSN)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +294,7 @@ func TestNode_QueryContext(t *testing.T) {
 }
 
 func TestNode_QueryRowContext(t *testing.T) {
-	n := newNode(defaultTestConfig(), testDSN, 10, 0)
+	n := newNode(defaultTestConfig(), testDSN)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +313,7 @@ func TestNode_QueryRowContext(t *testing.T) {
 }
 
 func TestNode_Begin(t *testing.T) {
-	n := newNode(defaultTestConfig(), testDSN, 10, 0)
+	n := newNode(defaultTestConfig(), testDSN)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -341,7 +330,7 @@ func TestNode_Begin(t *testing.T) {
 }
 
 func TestNode_BeginTx(t *testing.T) {
-	n := newNode(defaultTestConfig(), testDSN, 10, 0)
+	n := newNode(defaultTestConfig(), testDSN)
 	if err := n.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -449,7 +438,7 @@ func Test_availableNodes(t *testing.T) {
 	exp := make([]*Node, 10)
 	arg := make([]*Node, 10)
 	for i := 0; i < 10; i++ {
-		n := newNode(defaultTestConfig(), testDSN, 10, 0)
+		n := newNode(defaultTestConfig(), testDSN)
 		if err := n.Open(); err != nil {
 			t.Fatal(err)
 		}
