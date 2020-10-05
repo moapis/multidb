@@ -77,7 +77,6 @@ type Node struct {
 	// Errors produced by calling DB directly are not monitored by this package.
 	DB            *sql.DB
 	reconnectWait time.Duration
-	reconnecting  bool
 	mtx           sync.RWMutex
 }
 
@@ -122,36 +121,6 @@ func (n *Node) Close() error {
 	return err
 }
 
-func (n *Node) setReconnecting(s bool) {
-	n.mtx.Lock()
-	n.reconnecting = s
-	n.mtx.Unlock()
-}
-
-func (n *Node) reconnect(ctx context.Context) {
-	if n.reconnectWait == 0 {
-		return
-	}
-
-	for ctx.Err() == nil {
-		n.setReconnecting(true)
-		defer n.setReconnecting(false)
-
-		time.Sleep(n.reconnectWait)
-		if err := n.Open(); err == nil || err.Error() == ErrAlreadyOpen {
-			return
-		}
-	}
-}
-
-// Reconnecting returns true while reconnecting is in progress
-func (n *Node) Reconnecting() bool {
-	n.mtx.RLock()
-	defer n.mtx.RUnlock()
-
-	return n.reconnecting
-}
-
 // InUse get the InUse counter from db.Stats.
 // Returns -1 in case db is unavailable.
 func (n *Node) InUse() int {
@@ -164,18 +133,8 @@ func (n *Node) InUse() int {
 	return n.DB.Stats().InUse
 }
 
-// checkFailed closes this Node's DB pool if failed.
-// After closing reconnection is initiated, if applicable.
-func (n *Node) checkFailed(state bool) {
-	if n.failed(state) {
-		n.Close()
-		n.reconnect(context.Background())
-	}
-}
-
 // CheckErr updates the statistics. If the error is nil or whitelisted, success is recorded.
 // Any other case constitutes an error and failure is recorded.
-// If a the configured failure treshhold is reached, this node will we disconnected.
 //
 // This method is already called by each database call method and need to be used in most cases.
 // It is exported for use in extending libraries which need use struct embedding
@@ -183,13 +142,13 @@ func (n *Node) checkFailed(state bool) {
 func (n *Node) CheckErr(err error) error {
 	switch {
 	case err == nil:
-		go n.checkFailed(false)
+		go n.failed(false)
 	case errors.Is(err, sql.ErrNoRows) || errors.Is(err, sql.ErrTxDone) || errors.Is(err, context.Canceled):
-		go n.checkFailed(false)
+		go n.failed(false)
 	case n.WhiteList(err):
-		go n.checkFailed(false)
+		go n.failed(false)
 	default:
-		go n.checkFailed(true)
+		go n.failed(true)
 	}
 	return err
 }

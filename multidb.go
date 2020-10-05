@@ -74,13 +74,9 @@ type MultiDB struct {
 
 // Open all the configured DB hosts.
 // Poll Node.ConnErr() to inspect for connection failures.
-// Only returns an error if amount of configured nodes == 0.
-//
-// If ReconnectWait is set,
-// failing Nodes will enter into a reconnection sequence
-// and may become available after some time.
 func (c Config) Open() (*MultiDB, error) {
 	dataSourceNames := c.DBConf.DataSourceNames()
+
 	mdb := &MultiDB{all: make([]*Node, len(dataSourceNames))}
 	if len(mdb.all) == 0 {
 		return nil, errors.New(ErrNoNodes)
@@ -88,8 +84,9 @@ func (c Config) Open() (*MultiDB, error) {
 
 	for i, dsn := range dataSourceNames {
 		mdb.all[i] = newNode(c.DBConf, dsn, c.StatsLen, c.MaxFails, c.ReconnectWait)
+
 		if err := mdb.all[i].Open(); err != nil {
-			go mdb.all[i].reconnect(context.TODO())
+			return nil, fmt.Errorf("MDB Open %s: %w", dsn, err)
 		}
 	}
 	return mdb, nil
