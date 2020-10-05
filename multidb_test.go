@@ -79,7 +79,7 @@ func TestConfig_Open(t *testing.T) {
 				MaxFails:      20,
 				ReconnectWait: time.Minute,
 			},
-			false,
+			true,
 		},
 	}
 	for _, tt := range tests {
@@ -90,25 +90,18 @@ func TestConfig_Open(t *testing.T) {
 				MaxFails:      tt.fields.MaxFails,
 				ReconnectWait: tt.fields.ReconnectWait,
 			}
+
 			got, err := c.Open()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Config.Open() error = %v, wantErr %v", err, tt.wantErr)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("Config.Open() error = %v, wantErr %v", err, tt.wantErr)
+				}
 				return
 			}
-			if len(c.DBConf.DataSourceNames()) == 0 {
-				return
-			}
+
 			if len(got.all) != len(c.DBConf.DataSourceNames()) {
 				t.Errorf("Config.Open() Nodes # = %v, want %v", len(got.all), len(c.DBConf.DataSourceNames()))
-			}
-			time.Sleep(time.Millisecond) // Give some time for the recovery go routine to kick in
-			for _, n := range got.all {
-				if (n.DriverName() == "nil") != (n.DB == nil) {
-					t.Errorf("Config.Open() = %v, want %v", n.DB, n.DriverName())
-				}
-				if n.DriverName() == "nil" && !n.Reconnecting() {
-					t.Errorf("Config.Open() Reconnecting = %v, want %v", n.Reconnecting(), true)
-				}
 			}
 		})
 	}
