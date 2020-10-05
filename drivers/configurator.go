@@ -16,7 +16,4 @@ type Configurator interface {
 	// The query should return `true` if the node is master,
 	// `false` otherwise.
 	MasterQuery() string
-	// WhiteList returns true if the passed error is not a connection on DB consistency error.
-	// WhiteListed errors will not be counted towards the Node's fail statistics.
-	WhiteList(error) bool
 }

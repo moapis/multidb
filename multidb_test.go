@@ -227,9 +227,6 @@ func Test_electMaster(t *testing.T) {
 		node := &Node{
 			Configurator: defaultTestConfig(),
 			DB:           db,
-			nodeStats: nodeStats{
-				maxFails: -1,
-			},
 		}
 		if k == "master" {
 			exp = node

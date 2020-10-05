@@ -4,11 +4,6 @@
 
 /*
 Package multidb provides a sql.DB multiplexer for parallel queries using Go routines.
-It is meant as a top-level library which connects to a number of database Nodes.
-Nodes' health conditions are monitored by inspecting returning errors.
-After a (settable) threshold or errors has passed,
-a Node is disconnected and considered unavailable for subsequent requests.
-Failed nodes can be reconnected automatically.
 
 Multidb automatically polls which of the connected Nodes is a master.
 If the master fails, multidb will try to find a new master,
@@ -83,7 +78,7 @@ func (c Config) Open() (*MultiDB, error) {
 	}
 
 	for i, dsn := range dataSourceNames {
-		mdb.all[i] = newNode(c.DBConf, dsn, c.StatsLen, c.MaxFails, c.ReconnectWait)
+		mdb.all[i] = newNode(c.DBConf, dsn, c.StatsLen, c.MaxFails)
 
 		if err := mdb.all[i].Open(); err != nil {
 			return nil, fmt.Errorf("MDB Open %s: %w", dsn, err)
