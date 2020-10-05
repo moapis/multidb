@@ -26,7 +26,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/moapis/multidb/drivers"
 )
@@ -43,21 +42,6 @@ const (
 // Config configures multiple databas servers
 type Config struct {
 	DBConf drivers.Configurator `json:"dbconf,omitempty"`
-
-	// Amount of past connections to consider when establishing the failure rate.
-	StatsLen int `json:"statslen,omitempty"`
-	// Amount of allowed counted failures, after which the DB connector will be closed.
-	// Note that Go's SQL connectors are actually connection pools.
-	// Individual connections are already reset upon connection errors by the sql library.
-	// This library closes the complete pool for a single node.
-	// 0 disconnects on the first error. (Probably not what you want)
-	// A value >= StatsLen means 100% failure rate allowed.
-	// Negative values disables autoclosing statistics / counting.
-	MaxFails int `json:"maxfails"`
-	// Time to wait before attempting to reconnect failed nodes.
-	// Attempts will be done indefinitely.
-	// Set to 0 to disable reconnects.
-	ReconnectWait time.Duration `json:"reconnectwait"`
 }
 
 // MultiDB holds the multiple DB objects, capable of Writing and Reading.
@@ -78,7 +62,7 @@ func (c Config) Open() (*MultiDB, error) {
 	}
 
 	for i, dsn := range dataSourceNames {
-		mdb.all[i] = newNode(c.DBConf, dsn, c.StatsLen, c.MaxFails)
+		mdb.all[i] = newNode(c.DBConf, dsn)
 
 		if err := mdb.all[i].Open(); err != nil {
 			return nil, fmt.Errorf("MDB Open %s: %w", dsn, err)

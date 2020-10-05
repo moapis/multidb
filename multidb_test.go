@@ -85,10 +85,7 @@ func TestConfig_Open(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := Config{
-				DBConf:        tt.fields.DBConf,
-				StatsLen:      tt.fields.StatsLen,
-				MaxFails:      tt.fields.MaxFails,
-				ReconnectWait: tt.fields.ReconnectWait,
+				DBConf: tt.fields.DBConf,
 			}
 
 			got, err := c.Open()
@@ -132,9 +129,6 @@ func Example() {
 				Connect_timeout: 30,
 			},
 		},
-		StatsLen:      100,
-		MaxFails:      10,
-		ReconnectWait: 10 * time.Second,
 	}
 	// Connect to all specified DB Hosts
 	mdb, err := c.Open()
