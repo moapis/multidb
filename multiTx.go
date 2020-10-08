@@ -7,12 +7,12 @@ import (
 )
 
 type txBeginner interface {
-	BeginTx(context.Context, *sql.TxOptions) (*Tx, error)
+	BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error)
 }
 
-func beginMultiTx(ctx context.Context, opts *sql.TxOptions, txb ...txBeginner) ([]*Tx, error) {
+func beginMultiTx(ctx context.Context, opts *sql.TxOptions, txb ...txBeginner) ([]*sql.Tx, error) {
 	type result struct {
-		tx  *Tx
+		tx  *sql.Tx
 		err error
 	}
 
@@ -28,7 +28,7 @@ func beginMultiTx(ctx context.Context, opts *sql.TxOptions, txb ...txBeginner) (
 
 	var errs []error
 
-	txs := make([]*Tx, 0, len(txb))
+	txs := make([]*sql.Tx, 0, len(txb))
 
 	for i := 0; i < len(txb); i++ {
 		r := <-rc
@@ -56,7 +56,7 @@ func beginMultiTx(ctx context.Context, opts *sql.TxOptions, txb ...txBeginner) (
 // MultiTx holds a slice of open transactions to multiple nodes.
 // All methods on this type run their sql.Tx variant in one Go routine per Node.
 type MultiTx struct {
-	tx     []*Tx
+	tx     []*sql.Tx
 	wg     sync.WaitGroup
 	cancel context.CancelFunc
 }
@@ -88,7 +88,7 @@ func (m *MultiTx) Rollback() error {
 	m.cancelWait()
 	ec := make(chan error, len(m.tx))
 	for _, tx := range m.tx {
-		go func(tx *Tx) {
+		go func(tx *sql.Tx) {
 			err := tx.Rollback()
 			ec <- err
 		}(tx)
@@ -122,7 +122,7 @@ func (m *MultiTx) Rollback() error {
 func (m *MultiTx) Commit() error {
 	ec := make(chan error, len(m.tx))
 	for _, tx := range m.tx {
-		go func(tx *Tx) {
+		go func(tx *sql.Tx) {
 			ec <- tx.Commit()
 		}(tx)
 	}

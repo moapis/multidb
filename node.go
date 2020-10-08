@@ -5,175 +5,108 @@
 package multidb
 
 import (
-	"context"
 	"database/sql"
-	"errors"
+	"math"
 	"sort"
 	"sync"
-
-	"github.com/moapis/multidb/drivers"
-)
-
-const (
-	// ErrAlreadyOpen is returned when Opening on an already open Node
-	ErrAlreadyOpen = "Node already open"
 )
 
 // Node represents a database server connection.
-// Node Implements boil.ContextExecutor
 type Node struct {
-	drivers.Configurator
-	dataSourceName string
-	// DB holds the raw *sql.DB for direct access.
-	// Errors produced by calling DB directly are not monitored by this package.
-	DB  *sql.DB
+	name string
+	*sql.DB
+}
+
+// NewNode with DB, identified by name.
+func NewNode(name string, db *sql.DB) *Node {
+	return &Node{name, db}
+}
+
+// Name of this Node
+func (n *Node) Name() string {
+	return n.name
+}
+
+// stats returns a pointer to sql.DBStats, to avoid copying
+func (n *Node) stats() *sql.DBStats {
+	s := n.Stats()
+	return &s
+}
+
+// nodeMap is a map of nodes, identified by names.
+// Safe for concurrent use.
+type nodeMap struct {
+	nodes map[string]*Node
+
 	mtx sync.RWMutex
 }
 
-func newNode(conf drivers.Configurator, dsn string) *Node {
-	return &Node{
-		Configurator:   conf,
-		dataSourceName: dsn,
-	}
-}
+func (m *nodeMap) add(nodes ...*Node) {
+	m.mtx.Lock()
 
-// Open calls sql.Open() with the configured driverName and dataSourceName.
-// Open should only be used after the Node was (auto-)closed and reconnection is disabled.
-func (n *Node) Open() (err error) {
-	n.mtx.Lock()
-	defer n.mtx.Unlock()
-
-	if n.DB != nil {
-		return errors.New(ErrAlreadyOpen)
+	if m.nodes == nil {
+		m.nodes = make(map[string]*Node)
 	}
 
-	n.DB, err = sql.Open(n.DriverName(), n.dataSourceName)
-
-	return err
-}
-
-// Close the current DB node
-func (n *Node) Close() error {
-	return n.DB.Close()
-}
-
-// ExecContext wrapper around sql.DB.Exec.
-func (n *Node) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	n.mtx.RLock()
-	res, err := n.DB.ExecContext(ctx, query, args...)
-	n.mtx.RUnlock()
-
-	return res, err
-}
-
-// Exec wrapper around sql.DB.ExecContext,
-// using context.Background().
-func (n *Node) Exec(query string, args ...interface{}) (sql.Result, error) {
-	return n.ExecContext(context.Background(), query, args...)
-}
-
-// QueryContext wrapper around sql.DB.QueryContext.
-func (n *Node) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	n.mtx.RLock()
-	rows, err := n.DB.QueryContext(ctx, query, args...)
-	n.mtx.RUnlock()
-
-	return rows, err
-}
-
-// Query wrapper around sql.DB.QueryRowContext,
-// using context.Background().
-func (n *Node) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	return n.QueryContext(context.Background(), query, args...)
-}
-
-// QueryRowContext wrapper around sql.DB.QueryRowContext.
-func (n *Node) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	n.mtx.RLock()
-	row := n.DB.QueryRowContext(ctx, query, args...)
-	n.mtx.RUnlock()
-
-	return row
-}
-
-// QueryRow wrapper around sql.DB.QueryRowContext,
-// using context.Background().
-func (n *Node) QueryRow(query string, args ...interface{}) *sql.Row {
-	return n.QueryRowContext(context.Background(), query, args...)
-}
-
-// BUG(muhlemmer): Node types do not implement boil.Beginner
-// https://github.com/moapis/multidb/issues/2
-
-// BeginTx opens a new *sql.Tx on the Node.
-func (n *Node) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
-	n.mtx.RLock()
-	tx, err := n.DB.BeginTx(ctx, opts)
-	n.mtx.RUnlock()
-
-	return &Tx{tx}, err
-}
-
-// Begin opens a new *sql.Tx on the Node.
-func (n *Node) Begin() (*Tx, error) {
-	return n.BeginTx(context.Background(), nil)
-}
-
-type entry struct {
-	node   *Node
-	factor float32
-}
-
-// nodeList implements sort.Interface
-type entries []entry
-
-func (ent entries) Len() int           { return len(ent) }
-func (ent entries) Less(i, j int) bool { return ent[i].factor < ent[j].factor }
-func (ent entries) Swap(i, j int)      { ent[i], ent[j] = ent[j], ent[i] }
-
-func newEntries(nodes []*Node) entries {
-	var ent entries
 	for _, n := range nodes {
-		st := n.DB.Stats()
-		ent = append(ent, entry{
-			node:   n,
-			factor: float32(st.InUse) / float32(st.MaxOpenConnections),
-		})
+		m.nodes[n.name] = n
 	}
-	return ent
+
+	m.mtx.Unlock()
 }
 
-// sortAndSlice sorts the entries and return up to `no` amount of Nodes.
-func (ent entries) sortAndSlice(max int) []*Node {
-	sort.Sort(ent)
+func (m *nodeMap) delete(names ...string) {
+	m.mtx.Lock()
 
-	if len(ent) < max || max == 0 {
-		max = len(ent)
+	for _, name := range names {
+		delete(m.nodes, name)
 	}
 
-	nodes := make([]*Node, max)
-	for i := 0; i < max; i++ {
-		nodes[i] = ent[i].node
+	m.mtx.Unlock()
+}
+
+// getList returns all Nodes in a nodeList
+func (m *nodeMap) getList() nodeList {
+	m.mtx.RLock()
+
+	nodes := make([]*Node, len(m.nodes))
+
+	var i int
+	for _, node := range m.nodes {
+		nodes[i] = node
+		i++
 	}
+
+	m.mtx.RUnlock()
+
 	return nodes
 }
 
-// availableNodes returns a slice of available *Node.
-// The slice is sorted by the division of InUse/MaxOpenConnections.
-// Up to `no` amount of nodes is in the returned slice.
-// Nil is returned in case no nodes are available.
-func availableNodes(nodes []*Node, max int) ([]*Node, error) {
-	for _, n := range nodes {
-		n.mtx.RLock()
-		defer n.mtx.RUnlock()
+// sortedList returns all Nodes in a nodeList,
+// sorted by usage factor.
+func (m *nodeMap) sortedList() nodeList {
+	nodes := m.getList()
+	sort.Sort(nodes)
+
+	return nodes
+}
+
+func useFactor(stats *sql.DBStats) float64 {
+	f := float64(stats.InUse) / float64(stats.MaxOpenConnections)
+
+	if math.IsNaN(f) {
+		return 0
 	}
 
-	ent := newEntries(nodes)
-	if ent == nil {
-		return nil, errors.New(ErrNoNodes)
-	}
-	return ent.sortAndSlice(max), nil
+	return f
 }
+
+// nodeList implements sort.Interface
+type nodeList []*Node
+
+func (l nodeList) Len() int           { return len(l) }
+func (l nodeList) Less(i, j int) bool { return useFactor(l[i].stats()) < useFactor(l[j].stats()) }
+func (l nodeList) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
 
 // readOnlyOpts sets TxOptions.ReadOnly to true.
 // If opts is nil, a new one will be initialized.
