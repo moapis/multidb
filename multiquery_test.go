@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"reflect"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -119,22 +120,20 @@ func Test_checkMultiError(t *testing.T) {
 const defaultTestConns = 3
 
 func multiTestConnect(conns int) (*MultiDB, []sm.Sqlmock, error) {
-	var (
-		mocks []sm.Sqlmock
-		nodes []*Node
-	)
+	mocks := make([]sm.Sqlmock, conns)
+	mdb := new(MultiDB)
+
 	for i := 0; i < conns; i++ {
 		db, mock, err := sm.New()
 		if err != nil {
 			return nil, nil, err
 		}
-		mocks = append(mocks, mock)
-		nodes = append(nodes, &Node{
-			Configurator: defaultTestConfig(),
-			DB:           db,
-		})
+
+		mocks[i] = mock
+		mdb.Add(NewNode(strconv.Itoa(i), db))
 	}
-	return &MultiDB{all: nodes}, mocks, nil
+
+	return mdb, mocks, nil
 }
 
 func Test_multiExec(t *testing.T) {
@@ -361,15 +360,19 @@ func Test_multiQueryRow(t *testing.T) {
 	}
 }
 
+const benchmarkConns = 100
+
 func Benchmark_nodes2Exec(b *testing.B) {
 	mdb, _, err := multiTestConnect(benchmarkConns)
 	if err != nil {
 		b.Fatal(err)
 	}
 
+	nodes := mdb.nm.getList()
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		nodes2Exec(mdb.all)
+		nodes2Exec(nodes)
 	}
 }
 
@@ -406,8 +409,6 @@ func (*benchExecutor) QueryContext(context.Context, string, ...interface{}) (*sq
 func (*benchExecutor) QueryRowContext(context.Context, string, ...interface{}) *sql.Row {
 	return nil
 }
-
-const benchmarkConns = 100
 
 func initBenchExecutors() []executor {
 	ex := make([]executor, benchmarkConns)

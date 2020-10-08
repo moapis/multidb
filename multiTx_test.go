@@ -106,8 +106,8 @@ func Test_beginMultiTx(t *testing.T) {
 // benchTxBeginner is simple (no-op) txBeginner implementation
 type benchTxBeginner struct{}
 
-func (*benchTxBeginner) BeginTx(context.Context, *sql.TxOptions) (*Tx, error) {
-	return &Tx{}, nil
+func (*benchTxBeginner) BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error) {
+	return &sql.Tx{}, nil
 }
 
 func Benchmark_beginMultiTx(b *testing.B) {

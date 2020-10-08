@@ -73,7 +73,7 @@ func nodes2Exec(nodes []*Node) []executor {
 	return xs
 }
 
-func mtx2Exec(mtx []*Tx) []executor {
+func mtx2Exec(mtx []*sql.Tx) []executor {
 	xs := make([]executor, len(mtx))
 
 	for i, tx := range mtx {

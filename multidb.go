@@ -6,9 +6,6 @@
 Package multidb provides a sql.DB multiplexer for parallel queries using Go routines.
 
 Multidb automatically polls which of the connected Nodes is a master.
-If the master fails, multidb will try to find a new master,
-which might be found after promotion took place on a slave
-or the old master gets reconnected.
 Actual management of master and slaves (such as promotion)
 is considered outside the scope of this package.
 
@@ -24,10 +21,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
-	"sync"
-
-	"github.com/moapis/multidb/drivers"
+	"sync/atomic"
 )
 
 const (
@@ -39,36 +33,18 @@ const (
 	ErrSuccesReq = "SuccesReq > 1"
 )
 
-// Config configures multiple databas servers
-type Config struct {
-	DBConf drivers.Configurator `json:"dbconf,omitempty"`
-}
-
 // MultiDB holds the multiple DB objects, capable of Writing and Reading.
 type MultiDB struct {
-	master *Node
-	all    []*Node
-	mtx    sync.RWMutex // Protection for reconfiguration
-}
+	nm nodeMap
 
-// Open all the configured DB hosts.
-// Poll Node.ConnErr() to inspect for connection failures.
-func (c Config) Open() (*MultiDB, error) {
-	dataSourceNames := c.DBConf.DataSourceNames()
+	// MasterFunc should return true if the passed DB is the Master,
+	// typically by executing a driver specific query.
+	// False should be returned in all other cases.
+	// In case the query fails, an error should be returned.
+	MasterFunc func(context.Context, *sql.DB) (bool, error)
 
-	mdb := &MultiDB{all: make([]*Node, len(dataSourceNames))}
-	if len(mdb.all) == 0 {
-		return nil, errors.New(ErrNoNodes)
-	}
-
-	for i, dsn := range dataSourceNames {
-		mdb.all[i] = newNode(c.DBConf, dsn)
-
-		if err := mdb.all[i].Open(); err != nil {
-			return nil, fmt.Errorf("MDB Open %s: %w", dsn, err)
-		}
-	}
-	return mdb, nil
+	// holds the master node
+	master atomic.Value
 }
 
 // Close the DB connectors on all nodes.
@@ -76,13 +52,19 @@ func (c Config) Open() (*MultiDB, error) {
 // If all nodes respond with the same error, that exact error is returned as-is.
 // If there is a variety of errors, they will be embedded in a MultiError return.
 func (mdb *MultiDB) Close() error {
-	mdb.mtx.Lock()
-	defer mdb.mtx.Unlock()
+	nodes := mdb.nm.getList()
+	ec := make(chan error, len(nodes))
+
+	for _, n := range nodes {
+		go func(n *Node) {
+			ec <- n.Close()
+		}(n)
+	}
 
 	var errs []error
 
-	for _, n := range mdb.all {
-		if err := n.Close(); err != nil {
+	for i := 0; i < len(nodes); i++ {
+		if err := <-ec; err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -90,24 +72,64 @@ func (mdb *MultiDB) Close() error {
 	return checkMultiError(errs)
 }
 
-func electMaster(ctx context.Context, nodes []*Node) (*Node, error) {
+// Add DB Nodes to MultiDB
+func (mdb *MultiDB) Add(nodes ...*Node) {
+	mdb.nm.add(nodes...)
+}
+
+// Delete DB Nodes from MultiDB, identified by names
+func (mdb *MultiDB) Delete(names ...string) {
+	mdb.nm.delete(names...)
+}
+
+// availableNodes returns a list of nodes,
+// sorted by usage factor.
+// If there are no nodes available, ErrNoNodes is returned.
+func (mdb *MultiDB) availableNodes(max int) ([]*Node, error) {
+	nodes := mdb.nm.sortedList()
+	if len(nodes) == 0 {
+		return nil, errors.New(ErrNoNodes)
+	}
+
+	if max == 0 || max > len(nodes) {
+		return nodes, nil
+	}
+
+	return nodes[:max], nil
+}
+
+// SelectMaster runs mdb.MasterFunc against all Nodes.
+// The first one to return `true` will be returned and stored as master
+// for future calles to `mdb.Master()`.
+//
+// This method should be called only if trouble is detected with the current master,
+// which might mean that the master role is shifted to another Node.
+func (mdb *MultiDB) SelectMaster(ctx context.Context) (*Node, error) {
 	type result struct {
 		node     *Node
 		err      error
 		isMaster bool
 	}
 
+	nodes := mdb.nm.getList()
+
 	if len(nodes) == 0 {
 		return nil, errors.New(ErrNoNodes)
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	rc := make(chan result, len(nodes))
+
 	for _, n := range nodes {
 		go func(n *Node) {
 			res := result{
 				node: n,
 			}
-			res.err = n.QueryRowContext(ctx, n.MasterQuery()).Scan(&res.isMaster)
+
+			res.isMaster, res.err = mdb.MasterFunc(ctx, n.DB)
+
 			rc <- res
 		}(n)
 	}
@@ -116,9 +138,12 @@ func electMaster(ctx context.Context, nodes []*Node) (*Node, error) {
 
 	for i := 0; i < len(nodes); i++ {
 		res := <-rc
+
 		if res.isMaster {
+			mdb.master.Store(res.node)
 			return res.node, nil
 		}
+
 		if res.err != nil {
 			errs = append(errs, res.err)
 		}
@@ -127,45 +152,25 @@ func electMaster(ctx context.Context, nodes []*Node) (*Node, error) {
 	return nil, checkMultiError(errs)
 }
 
-func (mdb *MultiDB) setMaster(ctx context.Context) (*Node, error) {
-	mdb.mtx.Lock()
-	defer mdb.mtx.Unlock()
-
-	switch len(mdb.all) {
-	case 0:
-		return nil, fmt.Errorf(ErrNoMaster, errors.New(ErrNoNodes))
-	case 1:
-		mdb.master = mdb.all[0]
-		return mdb.master, nil
-	default:
-		var err error
-		mdb.master, err = electMaster(ctx, mdb.all)
-		if err != nil {
-			err = fmt.Errorf(ErrNoMaster, err)
-		}
-		return mdb.master, err
-	}
-}
-
-// Master node getter
+// Master node getter.
+//
+// If there is no Master set, like after initialization,
+// SelectMaster is ran to find the apropiate Master node.
 func (mdb *MultiDB) Master(ctx context.Context) (*Node, error) {
-	mdb.mtx.RLock()
-
-	if mdb.master == nil { // || !mdb.master.Ready()
-		mdb.mtx.RUnlock()
-		return mdb.setMaster(ctx)
+	if master, ok := mdb.master.Load().(*Node); ok {
+		return master, nil
 	}
 
-	defer mdb.mtx.RUnlock()
-	return mdb.master, nil
+	return mdb.SelectMaster(ctx)
 }
 
 // MasterTx returns the master node with an opened transaction
-func (mdb *MultiDB) MasterTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
+func (mdb *MultiDB) MasterTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error) {
 	master, err := mdb.Master(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	return master.BeginTx(ctx, opts)
 }
 
@@ -175,19 +180,17 @@ func (mdb *MultiDB) MasterTx(ctx context.Context, opts *sql.TxOptions) (*Tx, err
 // The returned node may be master or slave and should
 // only be used for read operations.
 func (mdb *MultiDB) Node() (*Node, error) {
-	mdb.mtx.RLock()
-	defer mdb.mtx.RUnlock()
-
-	nodes, err := availableNodes(mdb.all, 1)
+	nodes, err := mdb.availableNodes(1)
 	if err != nil {
 		return nil, err
 	}
+
 	return nodes[0], nil
 }
 
 // NodeTx returns any node with an opened transaction.
 // The transaction is created in ReadOnly mode.
-func (mdb *MultiDB) NodeTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
+func (mdb *MultiDB) NodeTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error) {
 	node, err := mdb.Node()
 	if err != nil {
 		return nil, err
@@ -195,12 +198,9 @@ func (mdb *MultiDB) NodeTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error
 	return node.BeginTx(ctx, readOnlyOpts(opts))
 }
 
-// All returns all Nodes, regardless of their state.
+// All returns all Nodes.
 func (mdb *MultiDB) All() []*Node {
-	mdb.mtx.RLock()
-	defer mdb.mtx.RUnlock()
-
-	return mdb.all
+	return mdb.nm.getList()
 }
 
 // MultiNode returns available *Nodes.
@@ -212,10 +212,7 @@ func (mdb *MultiDB) All() []*Node {
 // The nodes may be master or slaves and should
 // only be used for read operations.
 func (mdb *MultiDB) MultiNode(max int) (MultiNode, error) {
-	mdb.mtx.RLock()
-	defer mdb.mtx.RUnlock()
-
-	return availableNodes(mdb.all, max)
+	return mdb.availableNodes(max)
 }
 
 // MultiTx returns a MultiNode with an open transaction

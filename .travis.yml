@@ -9,8 +9,9 @@ install:
   - go get -v -t -d ./...
 
 script:
-  - go test -race -coverprofile=codecov.out -covermode=atomic
+  - go test -race -coverprofile=multidb.out -covermode=atomic
+  - go test -race -coverprofile=drivers.out -covermode=atomic ./drivers
   - go test -benchmem -bench . # Just a quick check if the benchmarks are valid
 
 after_script:
-  - bash <(curl -s https://codecov.io/bash) -f codecov.out
+  - bash <(curl -s https://codecov.io/bash) -f '*.out'
