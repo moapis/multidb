@@ -9,12 +9,7 @@ import (
 	"testing"
 
 	sm "github.com/DATA-DOG/go-sqlmock"
-	"github.com/volatiletech/sqlboiler/v4/boil"
 )
-
-// Interface implementation checks
-func _() boil.Executor        { return MultiNode{} }
-func _() boil.ContextExecutor { return MultiNode{} }
 
 // Simple tests for the wrapper methods
 func TestMultiNode_General(t *testing.T) {
