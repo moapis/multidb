@@ -8,14 +8,7 @@ import (
 	"time"
 
 	sm "github.com/DATA-DOG/go-sqlmock"
-	"github.com/volatiletech/sqlboiler/v4/boil"
 )
-
-// Interface implementation checks
-func _() boil.Executor          { return &MultiTx{} }
-func _() boil.ContextExecutor   { return &MultiTx{} }
-func _() boil.Transactor        { return &MultiTx{} }
-func _() boil.ContextTransactor { return &MultiTx{} }
 
 func Test_beginMultiTx(t *testing.T) {
 	t.Log("All nodes healthy")

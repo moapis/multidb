@@ -8,15 +8,7 @@ import (
 	"math"
 	"reflect"
 	"testing"
-
-	"github.com/volatiletech/sqlboiler/v4/boil"
 )
-
-// Interface implementation checks
-func _() boil.Executor        { return &Node{} }
-func _() boil.ContextExecutor { return &Node{} }
-func _() boil.Beginner        { return &Node{} }
-func _() boil.ContextBeginner { return &Node{} }
 
 func TestNode(t *testing.T) {
 	want := "foo"
