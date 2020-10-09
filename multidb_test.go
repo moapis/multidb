@@ -37,6 +37,23 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+var errTest = errors.New("A test error")
+
+func TestNoMasterErr(t *testing.T) {
+	err := error(&NoMasterErr{errTest})
+
+	want := fmt.Sprintf(errNoMaster, errTest)
+	got := err.Error()
+	if got != want {
+		t.Errorf("NoMasterErr.Error() = %s, want %s", got, want)
+	}
+
+	target := errors.Unwrap(err)
+	if target != errTest {
+		t.Errorf("NoMasterErr.Unwrap() = %v, want %v", target, errTest)
+	}
+}
+
 func TestMultiDB_Close(t *testing.T) {
 	mdb := &MultiDB{}
 
@@ -121,21 +138,29 @@ func TestMultiDB_selectMaster(t *testing.T) {
 		}
 	}
 
-	delete(mocks, "master")
 	mocks["slave"].ExpectQuery(testMasterQuery).WillDelayFor(50 * time.Millisecond).WillReturnRows(sm.NewRows([]string{"master"}).AddRow(false))
 	mocks["borked"].ExpectQuery(testMasterQuery).WillDelayFor(time.Second).WillReturnRows(sm.NewRows([]string{"master"}).AddRow(false))
 	mocks["errored"].ExpectQuery(testMasterQuery).WillReturnError(sql.ErrConnDone)
 
 	mdb.master.Load().(*Node).Close()
+	mdb.Delete("master")
 
 	ctx, cancel = context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	got, err := mdb.SelectMaster(ctx)
-	_, ok := err.(*MultiError)
-	if !ok {
-		t.Errorf("mdb.selectMaster() err = %T, want %T", err, MultiError{})
+	wantErrs := []error{
+		&NoMasterErr{},
+		sql.ErrConnDone,
 	}
+
+	got, err := mdb.SelectMaster(ctx)
+
+	for _, w := range wantErrs {
+		if !errors.As(err, &w) {
+			t.Errorf("mdb.selectMaster() err = %T, want %T", err, w)
+		}
+	}
+
 	if got != nil {
 		t.Errorf("mdb.selectMaster() = %v, want %v", got, nil)
 	}
@@ -143,7 +168,7 @@ func TestMultiDB_selectMaster(t *testing.T) {
 	mdb = &MultiDB{}
 
 	got, err = mdb.SelectMaster(ctx)
-	if err == nil || err.Error() != ErrNoNodes {
+	if err == nil || err != ErrNoNodes {
 		t.Errorf("electMaster() err = %v, want %v", err, ErrNoNodes)
 	}
 	if got != nil {
@@ -215,7 +240,7 @@ func TestMultiDB_Node(t *testing.T) {
 			"No nodes",
 			&MultiDB{},
 			false,
-			errors.New(ErrNoNodes),
+			ErrNoNodes,
 		},
 		{
 			"Single node",
@@ -277,7 +302,7 @@ func TestMultiDB_NodeTx(t *testing.T) {
 			"No nodes",
 			&MultiDB{},
 			false,
-			errors.New(ErrNoNodes),
+			ErrNoNodes,
 		},
 		{
 			"Single node",
@@ -337,7 +362,7 @@ func TestMultiDB_MultiNode(t *testing.T) {
 			&MultiDB{},
 			0,
 			0,
-			errors.New(ErrNoNodes),
+			ErrNoNodes,
 		},
 		{
 			"No limit",
@@ -426,7 +451,7 @@ func TestMultiDB_MultiNodeTx(t *testing.T) {
 			&MultiDB{},
 			0,
 			0,
-			errors.New(ErrNoNodes),
+			ErrNoNodes,
 		},
 		{
 			"No limit",

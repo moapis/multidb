@@ -21,16 +21,29 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"sync/atomic"
 )
 
-const (
+const errNoMaster = "No master: %v"
+
+// NoMasterErr is returned when there is no master available.
+// The causing error is wrapped and can be obtained through errors.Unwrap().
+type NoMasterErr struct {
+	wrapped error
+}
+
+func (err *NoMasterErr) Error() string {
+	return fmt.Sprintf(errNoMaster, err.wrapped)
+}
+
+func (err *NoMasterErr) Unwrap() error {
+	return err.wrapped
+}
+
+var (
 	// ErrNoNodes is returned when there are no connected nodes available for the requested operation
-	ErrNoNodes = "No available nodes"
-	// ErrNoMaster is returned when no master is available
-	ErrNoMaster = "No available master, cause: %w"
-	// ErrSuccesReq is returned when higher than 1.0
-	ErrSuccesReq = "SuccesReq > 1"
+	ErrNoNodes = errors.New("No available nodes")
 )
 
 // MultiDB holds the multiple DB objects, capable of Writing and Reading.
@@ -88,7 +101,7 @@ func (mdb *MultiDB) Delete(names ...string) {
 func (mdb *MultiDB) availableNodes(max int) ([]*Node, error) {
 	nodes := mdb.nm.sortedList()
 	if len(nodes) == 0 {
-		return nil, errors.New(ErrNoNodes)
+		return nil, ErrNoNodes
 	}
 
 	if max == 0 || max > len(nodes) {
@@ -114,7 +127,7 @@ func (mdb *MultiDB) SelectMaster(ctx context.Context) (*Node, error) {
 	nodes := mdb.nm.getList()
 
 	if len(nodes) == 0 {
-		return nil, errors.New(ErrNoNodes)
+		return nil, ErrNoNodes
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -149,7 +162,7 @@ func (mdb *MultiDB) SelectMaster(ctx context.Context) (*Node, error) {
 		}
 	}
 
-	return nil, checkMultiError(errs)
+	return nil, &NoMasterErr{checkMultiError(errs)}
 }
 
 // Master node getter.
