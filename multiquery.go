@@ -7,6 +7,7 @@ package multidb
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -37,6 +38,11 @@ func checkMultiError(errs []error) error {
 	var first error
 
 	for _, err := range errs {
+
+		if ne := new(NodeError); errors.As(err, &ne) {
+			err = errors.Unwrap(ne)
+		}
+
 		switch {
 		case err == nil:
 			break
@@ -62,32 +68,33 @@ func checkMultiError(errs []error) error {
 	return first
 }
 
+// ErrCallbackFunc is called by the individual routines
+// executing queries on multiple nodes.
+// The function will be called concurently.
+type ErrCallbackFunc func(error)
+
+// NodeError is passed to ErrCallbackFunc functions in order to
+// destinguish between DB nodes in concurrent query executions.
+type NodeError struct {
+	name    string
+	wrapped error
+}
+
+func (ne *NodeError) Error() string {
+	return fmt.Sprintf("Node %s: %v", ne.name, ne.wrapped)
+}
+
+func (ne *NodeError) Unwrap() error {
+	return ne.wrapped
+}
+
 type executor interface {
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
 }
 
-func nodes2Exec(nodes []*Node) []executor {
-	xs := make([]executor, len(nodes))
-
-	for i, node := range nodes {
-		xs[i] = node
-	}
-	return xs
-}
-
-func mtx2Exec(mtx []*sql.Tx) []executor {
-	xs := make([]executor, len(mtx))
-
-	for i, tx := range mtx {
-		xs[i] = tx
-	}
-
-	return xs
-}
-
-func multiExec(ctx context.Context, wg *sync.WaitGroup, xs []executor, query string, args ...interface{}) (sql.Result, error) {
+func multiExec(ctx context.Context, wg *sync.WaitGroup, xs map[string]executor, errCallback ErrCallbackFunc, query string, args ...interface{}) (sql.Result, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -102,17 +109,26 @@ func multiExec(ctx context.Context, wg *sync.WaitGroup, xs []executor, query str
 		wg.Add(len(xs))
 	}
 
-	for _, x := range xs {
-		go func(x executor) {
+	for name, x := range xs {
+		go func(name string, x executor) {
 			var r result
+
 			r.res, r.err = x.ExecContext(ctx, query, args...)
+			if r.err != nil {
+				r.err = &NodeError{name, r.err}
+
+				if errCallback != nil {
+					errCallback(r.err)
+				}
+			}
+
 			rc <- r
 
 			if wg != nil {
 				wg.Done()
 			}
 
-		}(x)
+		}(name, x)
 	}
 
 	var errs []error
@@ -130,7 +146,7 @@ func multiExec(ctx context.Context, wg *sync.WaitGroup, xs []executor, query str
 	return nil, checkMultiError(errs)
 }
 
-func multiQuery(ctx context.Context, wg *sync.WaitGroup, xs []executor, query string, args ...interface{}) (*sql.Rows, error) {
+func multiQuery(ctx context.Context, wg *sync.WaitGroup, xs map[string]executor, errCallback ErrCallbackFunc, query string, args ...interface{}) (*sql.Rows, error) {
 	type result struct {
 		rows *sql.Rows
 		err  error
@@ -143,16 +159,25 @@ func multiQuery(ctx context.Context, wg *sync.WaitGroup, xs []executor, query st
 		wg.Add(len(xs))
 	}
 
-	for i := 0; i < len(xs); i++ {
-		go func(x executor) {
+	for name, x := range xs {
+		go func(name string, x executor) {
 			var r result
+
 			r.rows, r.err = x.QueryContext(ctx, query, args...)
+			if r.err != nil {
+				r.err = &NodeError{name, r.err}
+
+				if errCallback != nil {
+					errCallback(r.err)
+				}
+			}
+
 			rc <- r
 
 			if wg != nil {
 				wg.Done()
 			}
-		}(xs[i])
+		}(name, x)
 	}
 
 	var errs []error
@@ -180,21 +205,29 @@ func multiQuery(ctx context.Context, wg *sync.WaitGroup, xs []executor, query st
 	return nil, checkMultiError(errs)
 }
 
-func multiQueryRow(ctx context.Context, wg *sync.WaitGroup, xs []executor, query string, args ...interface{}) (row *sql.Row) {
+func multiQueryRow(ctx context.Context, wg *sync.WaitGroup, xs map[string]executor, errCallback ErrCallbackFunc, query string, args ...interface{}) (row *sql.Row) {
 	rc := make(chan *sql.Row, len(xs))
 
 	if wg != nil {
 		wg.Add(len(xs))
 	}
 
-	for _, x := range xs {
-		go func(x executor) {
-			rc <- x.QueryRowContext(ctx, query, args...)
+	for name, x := range xs {
+		go func(name string, x executor) {
+			row := x.QueryRowContext(ctx, query, args...)
+
+			if row != nil { // Prevent panic in benchmarks
+				if err := row.Err(); err != nil && errCallback != nil {
+					errCallback(&NodeError{name, err})
+				}
+			}
+
+			rc <- row
 
 			if wg != nil {
 				wg.Done()
 			}
-		}(x)
+		}(name, x)
 	}
 
 	for i := len(xs); i > 0; i-- {

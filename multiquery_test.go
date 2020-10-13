@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log"
 	"reflect"
 	"strconv"
 	"sync"
@@ -87,6 +88,39 @@ func Test_checkMultiError(t *testing.T) {
 			},
 		},
 		{
+			"Different NodeError cases",
+			[]error{
+				&NodeError{
+					name:    "Node 1",
+					wrapped: errors.New("First"),
+				},
+				&NodeError{
+					name:    "Node 2",
+					wrapped: errors.New("Second"),
+				},
+				&NodeError{
+					name:    "Node 3",
+					wrapped: errors.New("Third"),
+				},
+			},
+			&MultiError{
+				[]error{
+					&NodeError{
+						name:    "Node 1",
+						wrapped: errors.New("First"),
+					},
+					&NodeError{
+						name:    "Node 2",
+						wrapped: errors.New("Second"),
+					},
+					&NodeError{
+						name:    "Node 3",
+						wrapped: errors.New("Third"),
+					},
+				},
+			},
+		},
+		{
 			"With nil",
 			[]error{
 				nil,
@@ -111,6 +145,24 @@ func Test_checkMultiError(t *testing.T) {
 			},
 			sql.ErrNoRows,
 		},
+		{
+			"Same NodeError cases",
+			[]error{
+				&NodeError{
+					name:    "Node 1",
+					wrapped: sql.ErrNoRows,
+				},
+				&NodeError{
+					name:    "Node 2",
+					wrapped: sql.ErrNoRows,
+				},
+				&NodeError{
+					name:    "Node 3",
+					wrapped: sql.ErrNoRows,
+				},
+			},
+			sql.ErrNoRows,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -118,6 +170,61 @@ func Test_checkMultiError(t *testing.T) {
 				t.Errorf("MultiError.check() error = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func ExampleErrCallbackFunc() {
+	var (
+		// ErrCallBackFunc is called concurrently.
+		// A Mutex is required when accessing a shared object
+		mu       sync.Mutex
+		counters map[string]int
+	)
+
+	ecb := func(err error) {
+
+		// Ignore unimportant errors
+		if errors.Is(err, context.Canceled) ||
+			errors.Is(err, sql.ErrNoRows) ||
+			errors.Is(err, sql.ErrTxDone) {
+			return
+		}
+
+		nodeErr := new(NodeError)
+
+		if !errors.As(err, &nodeErr) {
+			log.Printf("Unknown error: %v", err)
+		}
+
+		mu.Lock()
+
+		counters[nodeErr.name]++
+		log.Printf("%v; fail count: %d", nodeErr, counters[nodeErr.name])
+
+		mu.Unlock()
+	}
+
+	_, _ = mdb.MultiNode(3, ecb)
+	// Continue running queries
+}
+
+func TestNodeError(t *testing.T) {
+	wrapped := errors.New("Spanac error")
+
+	err := error(&NodeError{
+		name:    "One",
+		wrapped: wrapped,
+	})
+
+	want := "Node One: Spanac error"
+	got := err.Error()
+	if got != want {
+		t.Errorf("NodeError.Error() = %s, want %s", got, want)
+	}
+
+	gotErr := errors.Unwrap(err)
+	if gotErr != wrapped {
+		t.Errorf("NodeError.Unwrap() = %v, want %v", gotErr, wrapped)
 	}
 }
 
@@ -134,14 +241,13 @@ func multiTestConnect(conns int) (*MultiDB, []sm.Sqlmock, error) {
 		}
 
 		mocks[i] = mock
-		mdb.Add(NewNode(strconv.Itoa(i), db))
+		mdb.Add(strconv.Itoa(i), db)
 	}
 
 	return mdb, mocks, nil
 }
 
-func Test_multiExec(t *testing.T) {
-	t.Log("All nodes healthy")
+func Test_multiExec_healthy(t *testing.T) {
 	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
@@ -149,7 +255,13 @@ func Test_multiExec(t *testing.T) {
 	for _, mock := range mocks {
 		mock.ExpectExec(testQuery).WithArgs(1).WillReturnResult(sm.NewResult(2, 3))
 	}
-	got, err := multiExec(context.Background(), nil, nodes2Exec(mdb.All()), testQuery, 1)
+
+	mn, err := mdb.MultiNode(0, testErrCallback(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := multiExec(context.Background(), nil, mn.nodes, testErrCallback(t), testQuery, 1)
 	if err != nil {
 		t.Error(err)
 	}
@@ -157,9 +269,9 @@ func Test_multiExec(t *testing.T) {
 	if err != nil || i != 3 {
 		t.Errorf("multiExec() Res = %v, want %v", i, 3)
 	}
-
-	t.Log("Healty delayed, two error")
-	mdb, mocks, err = multiTestConnect(defaultTestConns)
+}
+func Test_multiExec_healthy_delayed(t *testing.T) {
+	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,39 +283,59 @@ func Test_multiExec(t *testing.T) {
 		}
 	}
 
+	mn, err := mdb.MultiNode(0, testErrCallback(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	wg := &sync.WaitGroup{}
-	got, err = multiExec(context.Background(), wg, nodes2Exec(mdb.All()), testQuery, 1)
+	got, err := multiExec(context.Background(), wg, mn.nodes, testErrCallback(t), testQuery, 1)
 	wg.Wait()
 
 	if err != nil {
 		t.Error(err)
 	}
-	i, err = got.RowsAffected()
+	i, err := got.RowsAffected()
 	if err != nil || i != 3 {
 		t.Errorf("multiExec() Res = %v, want %v", i, 3)
 	}
 
-	t.Log("All same error")
-	mdb, mocks, err = multiTestConnect(defaultTestConns)
+}
+
+func Test_multiExec_error(t *testing.T) {
+	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, mock := range mocks {
 		mock.ExpectExec(testQuery).WillReturnError(sql.ErrNoRows)
 	}
-	got, err = multiExec(context.Background(), nil, nodes2Exec(mdb.All()), testQuery, 1)
+
+	mn, err := mdb.MultiNode(0, testErrCallback(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := multiExec(context.Background(), nil, mn.nodes, testErrCallback(t), testQuery, 1)
 	if err != sql.ErrNoRows {
 		t.Errorf("exec() expected err: %v, got: %v", sql.ErrNoRows, err)
 	}
 	if got != nil {
 		t.Errorf("multiExec() Res = %v, want %v", got, nil)
 	}
+}
 
-	t.Log("Different errors")
-	mdb, mocks, err = multiTestConnect(defaultTestConns)
+func Test_multiExec_MultiError(t *testing.T) {
+	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	mn, err := mdb.MultiNode(0, testErrCallback(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	for i, mock := range mocks {
 		if i == 0 {
 			mock.ExpectExec(testQuery).WillReturnError(sql.ErrNoRows)
@@ -211,7 +343,7 @@ func Test_multiExec(t *testing.T) {
 			mock.ExpectExec(testQuery).WillReturnError(sql.ErrConnDone)
 		}
 	}
-	got, err = multiExec(context.Background(), nil, nodes2Exec(mdb.All()), testQuery, 1)
+	got, err := multiExec(context.Background(), nil, mn.nodes, testErrCallback(t), testQuery, 1)
 	if err == nil {
 		t.Errorf("multiExec() expected err got: %v", err)
 	}
@@ -224,8 +356,7 @@ func Test_multiExec(t *testing.T) {
 	}
 }
 
-func Test_multiQuery(t *testing.T) {
-	t.Log("All nodes healthy")
+func Test_multiQuery_healty(t *testing.T) {
 	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
@@ -234,7 +365,13 @@ func Test_multiQuery(t *testing.T) {
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
 	}
-	rows, err := multiQuery(context.Background(), nil, nodes2Exec(mdb.All()), testQuery, 1)
+
+	mn, err := mdb.MultiNode(0, testErrCallback(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := multiQuery(context.Background(), nil, mn.nodes, testErrCallback(t), testQuery, 1)
 	if err != nil {
 		t.Error(err)
 	}
@@ -247,12 +384,15 @@ func Test_multiQuery(t *testing.T) {
 	if got != want {
 		t.Errorf("multiQuery() R = %v, want %v", got, want)
 	}
+}
 
-	t.Log("Healty delayed, two error")
-	mdb, mocks, err = multiTestConnect(defaultTestConns)
+func Test_multiQuery_healty_delayed(t *testing.T) {
+	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	want := "value"
 	for i, mock := range mocks {
 		if i == 0 {
 			mock.ExpectQuery(testQuery).WillDelayFor(1 * time.Second).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
@@ -261,16 +401,23 @@ func Test_multiQuery(t *testing.T) {
 		}
 	}
 
+	mn, err := mdb.MultiNode(0, testErrCallback(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	wg := &sync.WaitGroup{}
 
-	rows, err = multiQuery(context.Background(), wg, nodes2Exec(mdb.All()), testQuery, 1)
+	rows, err := multiQuery(context.Background(), wg, mn.nodes, testErrCallback(t), testQuery, 1)
 	wg.Wait()
 
 	if err != nil {
 		t.Error(err)
 	}
 	rows.Next()
-	got = ""
+
+	var got string
+
 	if err = rows.Scan(&got); err != nil {
 		t.Fatal(err)
 	}
@@ -278,17 +425,24 @@ func Test_multiQuery(t *testing.T) {
 	if got != want {
 		t.Errorf("multiQuery() R = %v, want %v", got, want)
 	}
+}
 
+func Test_multiQuery_error(t *testing.T) {
 	t.Log("All same error")
-	mdb, mocks, err = multiTestConnect(defaultTestConns)
+	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WillReturnError(sql.ErrNoRows)
 	}
-	rows, err = multiQuery(context.Background(), wg, nodes2Exec(mdb.All()), testQuery, 1)
-	wg.Wait()
+
+	mn, err := mdb.MultiNode(0, testErrCallback(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := multiQuery(context.Background(), nil, mn.nodes, testErrCallback(t), testQuery, 1)
 
 	if err != sql.ErrNoRows {
 		t.Errorf("Expected err: %v, got: %v", sql.ErrNoRows, err)
@@ -296,9 +450,11 @@ func Test_multiQuery(t *testing.T) {
 	if rows != nil {
 		t.Errorf("multiQuery() Res = %v, want %v", rows, nil)
 	}
+}
 
+func Test_multiQuery_MultiError(t *testing.T) {
 	t.Log("Different errors")
-	mdb, mocks, err = multiTestConnect(defaultTestConns)
+	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +465,13 @@ func Test_multiQuery(t *testing.T) {
 			mock.ExpectQuery(testQuery).WillReturnError(sql.ErrConnDone)
 		}
 	}
-	rows, err = multiQuery(context.Background(), nil, nodes2Exec(mdb.All()), testQuery, 1)
+
+	mn, err := mdb.MultiNode(0, testErrCallback(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := multiQuery(context.Background(), nil, mn.nodes, testErrCallback(t), testQuery, 1)
 	if err == nil {
 		t.Errorf("multiQuery() expected err got: %v", err)
 	}
@@ -322,8 +484,7 @@ func Test_multiQuery(t *testing.T) {
 	}
 }
 
-func Test_multiQueryRow(t *testing.T) {
-	t.Log("All nodes healthy")
+func Test_multiQueryRow_healthy(t *testing.T) {
 	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
@@ -333,8 +494,43 @@ func Test_multiQueryRow(t *testing.T) {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
 	}
 
-	wg := &sync.WaitGroup{}
-	row := multiQueryRow(context.Background(), wg, nodes2Exec(mdb.All()), testQuery, 1)
+	mn, err := mdb.MultiNode(0, testErrCallback(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	row := multiQueryRow(context.Background(), nil, mn.nodes, testErrCallback(t), testQuery, 1)
+
+	var got string
+	if err = row.Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("multiQueryRow() R = %v, want %v", got, want)
+	}
+}
+
+func Test_multiQueryRow_healthy_delayed(t *testing.T) {
+	mdb, mocks, err := multiTestConnect(defaultTestConns)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "value"
+	for i, mock := range mocks {
+		if i == 0 {
+			mock.ExpectQuery(testQuery).WillDelayFor(1 * time.Second).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
+		} else {
+			mock.ExpectQuery(testQuery).WillReturnError(sql.ErrConnDone)
+		}
+	}
+
+	mn, err := mdb.MultiNode(0, testErrCallback(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	row := multiQueryRow(context.Background(), &wg, mn.nodes, testErrCallback(t), testQuery, 1)
 	wg.Wait()
 
 	var got string
@@ -344,17 +540,25 @@ func Test_multiQueryRow(t *testing.T) {
 	if got != want {
 		t.Errorf("multiQueryRow() R = %v, want %v", got, want)
 	}
+}
 
-	t.Log("All same error")
-	mdb, mocks, err = multiTestConnect(defaultTestConns)
+func Test_multiQueryRow_error(t *testing.T) {
+	mdb, mocks, err := multiTestConnect(defaultTestConns)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WillReturnError(sql.ErrNoRows)
 	}
-	row = multiQueryRow(context.Background(), nil, nodes2Exec(mdb.All()), testQuery, 1)
-	got = ""
+
+	mn, err := mdb.MultiNode(0, testErrCallback(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	row := multiQueryRow(context.Background(), nil, mn.nodes, testErrCallback(t), testQuery, 1)
+
+	var got string
 	err = row.Scan(&got)
 	if err != sql.ErrNoRows {
 		t.Errorf("Expected err: %v, got: %v", sql.ErrNoRows, err)
@@ -365,41 +569,6 @@ func Test_multiQueryRow(t *testing.T) {
 }
 
 const benchmarkConns = 100
-
-func Benchmark_nodes2Exec(b *testing.B) {
-	mdb, _, err := multiTestConnect(benchmarkConns)
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	nodes := mdb.nm.getList()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		nodes2Exec(nodes)
-	}
-}
-
-func Benchmark_mtx2Exec(b *testing.B) {
-	mdb, mocks, err := multiTestConnect(benchmarkConns)
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	for _, m := range mocks {
-		m.ExpectBegin()
-	}
-
-	mtx, err := mdb.MultiTx(context.Background(), nil, benchmarkConns)
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		mtx2Exec(mtx.tx)
-	}
-}
 
 // benchExecutor is a simple (no-op) executor implementation
 type benchExecutor struct{}
@@ -414,11 +583,14 @@ func (*benchExecutor) QueryRowContext(context.Context, string, ...interface{}) *
 	return nil
 }
 
-func initBenchExecutors() []executor {
-	ex := make([]executor, benchmarkConns)
+// benchErrCallbakc is no-op
+func benchErrCallback(error) {}
+
+func initBenchExecutors() map[string]executor {
+	ex := make(map[string]executor, benchmarkConns)
 
 	for i := 0; i < benchmarkConns; i++ {
-		ex[i] = &benchExecutor{}
+		ex[strconv.Itoa(i)] = &benchExecutor{}
 	}
 
 	return ex
@@ -429,7 +601,7 @@ func Benchmark_multiExec(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		multiExec(context.Background(), nil, ex, "")
+		multiExec(context.Background(), nil, ex, benchErrCallback, "")
 	}
 }
 
@@ -439,7 +611,7 @@ func Benchmark_multiExec_wait(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		multiExec(context.Background(), wg, ex, "")
+		multiExec(context.Background(), wg, ex, benchErrCallback, "")
 		wg.Wait()
 	}
 }
@@ -449,7 +621,7 @@ func Benchmark_multiQuery(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		multiQuery(context.Background(), nil, ex, "")
+		multiQuery(context.Background(), nil, ex, benchErrCallback, "")
 	}
 }
 
@@ -459,7 +631,7 @@ func Benchmark_multiQuery_wait(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		multiQuery(context.Background(), wg, ex, "")
+		multiQuery(context.Background(), wg, ex, benchErrCallback, "")
 		wg.Wait()
 	}
 }
@@ -469,7 +641,7 @@ func Benchmark_multiQueryRow(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		multiQueryRow(context.Background(), nil, ex, "")
+		multiQueryRow(context.Background(), nil, ex, benchErrCallback, "")
 	}
 }
 
@@ -479,7 +651,7 @@ func Benchmark_multiQueryRow_wait(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		multiQueryRow(context.Background(), wg, ex, "")
+		multiQueryRow(context.Background(), wg, ex, benchErrCallback, "")
 		wg.Wait()
 	}
 }
@@ -490,17 +662,15 @@ go test -benchmem -bench .
 goos: linux
 goarch: amd64
 pkg: github.com/moapis/multidb
-Benchmark_beginMultiTx-8                   24188             46950 ns/op            5280 B/op        103 allocs/op
-BenchmarkMultiNode_txBeginners-8         1382906               936 ns/op            1792 B/op          1 allocs/op
-Benchmark_nodes2Exec-8                   1000000              1017 ns/op            1792 B/op          1 allocs/op
-Benchmark_mtx2Exec-8                     1000000              1015 ns/op            1792 B/op          1 allocs/op
-Benchmark_multiExec-8                      40836             28774 ns/op            3392 B/op          5 allocs/op
-Benchmark_multiExec_wait-8                 36723             32793 ns/op            3392 B/op          5 allocs/op
-Benchmark_multiQuery-8                     42198             29085 ns/op            3306 B/op          3 allocs/op
-Benchmark_multiQuery_wait-8                26955             44723 ns/op            3292 B/op          3 allocs/op
-Benchmark_multiQueryRow-8                  26910             44643 ns/op            1000 B/op          3 allocs/op
-Benchmark_multiQueryRow_wait-8             26415             44659 ns/op            1000 B/op          3 allocs/op
+Benchmark_beginMultiTx-8                   19437             56681 ns/op           22453 B/op        106 allocs/op
+BenchmarkMultiNode_txBeginners-8          148069              7682 ns/op            5457 B/op          4 allocs/op
+Benchmark_multiExec-8                      38809             31069 ns/op            3392 B/op          5 allocs/op
+Benchmark_multiExec_wait-8                 34560             34027 ns/op            3392 B/op          5 allocs/op
+Benchmark_multiQuery-8                     38163             31505 ns/op            3314 B/op          4 allocs/op
+Benchmark_multiQuery_wait-8                26208             47113 ns/op            3316 B/op          3 allocs/op
+Benchmark_multiQueryRow-8                  26485             44842 ns/op            1000 B/op          3 allocs/op
+Benchmark_multiQueryRow_wait-8             26640             45037 ns/op            1000 B/op          3 allocs/op
 PASS
-ok      github.com/moapis/multidb       20.978s
+ok      github.com/moapis/multidb       17.723s
 
 */
