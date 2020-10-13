@@ -9,9 +9,12 @@ import (
 	"database/sql"
 )
 
-// MultiNode holds a slice of Nodes.
+// MultiNode holds multiple DB Nodes.
 // All methods on this type run their sql.DB variant in one Go routine per Node.
-type MultiNode []*Node
+type MultiNode struct {
+	nodes       map[string]executor
+	errCallback ErrCallbackFunc
+}
 
 // ExecContext runs sql.DB.ExecContext on the Nodes in separate Go routines.
 // The first non-error result is returned immediately
@@ -22,15 +25,15 @@ type MultiNode []*Node
 //
 // It does not make much sense to run this method against multiple Nodes, as they are usually slaves.
 // This method is primarily included to implement boil.ContextExecutor.
-func (mn MultiNode) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return multiExec(ctx, nil, nodes2Exec(mn), query, args...)
+func (m *MultiNode) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	return multiExec(ctx, nil, m.nodes, m.errCallback, query, args...)
 }
 
 // Exec runs ExecContext with context.Background().
 // It is highly recommended to stick with the contexted variant in parallel executions.
 // This method is primarily included to implement boil.Executor.
-func (mn MultiNode) Exec(query string, args ...interface{}) (sql.Result, error) {
-	return multiExec(context.Background(), nil, nodes2Exec(mn), query, args...)
+func (m *MultiNode) Exec(query string, args ...interface{}) (sql.Result, error) {
+	return multiExec(context.Background(), nil, m.nodes, m.errCallback, query, args...)
 }
 
 // QueryContext runs sql.DB.QueryContext on the Nodes in separate Go routines.
@@ -41,36 +44,36 @@ func (mn MultiNode) Exec(query string, args ...interface{}) (sql.Result, error) 
 // If there is a variety of errors, they will be embedded in a MultiError return.
 //
 // Implements boil.ContextExecutor.
-func (mn MultiNode) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	return multiQuery(ctx, nil, nodes2Exec(mn), query, args...)
+func (m *MultiNode) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	return multiQuery(ctx, nil, m.nodes, m.errCallback, query, args...)
 }
 
 // Query runs QueryContext with context.Background().
 // It is highly recommended to stick with the contexted variant in parallel executions.
 // This method is primarily included to implement boil.Executor.
-func (mn MultiNode) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	return multiQuery(context.Background(), nil, nodes2Exec(mn), query, args...)
+func (m *MultiNode) Query(query string, args ...interface{}) (*sql.Rows, error) {
+	return multiQuery(context.Background(), nil, m.nodes, m.errCallback, query, args...)
 }
 
 // QueryRowContext runs sql.DB.QueryRowContext on the Nodes in separate Go routines.
 // The first error free result is returned immediately.
 // If all resulting sql.Row objects contain an error, only the last Row containing an error is returned.
-func (mn MultiNode) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return multiQueryRow(ctx, nil, nodes2Exec(mn), query, args...)
+func (m *MultiNode) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	return multiQueryRow(ctx, nil, m.nodes, m.errCallback, query, args...)
 }
 
 // QueryRow runs QueryRowContext with context.Background().
 // It is highly recommended to stick with the contexted variant in parallel executions.
 // This method is primarily included to implement boil.Executor.
-func (mn MultiNode) QueryRow(query string, args ...interface{}) *sql.Row {
-	return multiQueryRow(context.Background(), nil, nodes2Exec(mn), query, args...)
+func (m *MultiNode) QueryRow(query string, args ...interface{}) *sql.Row {
+	return multiQueryRow(context.Background(), nil, m.nodes, m.errCallback, query, args...)
 }
 
-func (mn MultiNode) txBeginners() []txBeginner {
-	txb := make([]txBeginner, len(mn))
+func (m *MultiNode) txBeginners() map[string]txBeginner {
+	txb := make(map[string]txBeginner, len(m.nodes))
 
-	for i, node := range mn {
-		txb[i] = node
+	for name, node := range m.nodes {
+		txb[name] = node.(txBeginner)
 	}
 
 	return txb
@@ -93,15 +96,18 @@ func (mn MultiNode) txBeginners() []txBeginner {
 // Tx will carry fewer amount of entries than requested.
 // This breaks the common `if err != nil` convention,
 // but we want to leave the descission whetter to proceed or not, up to the caller.
-func (mn MultiNode) BeginTx(ctx context.Context, opts *sql.TxOptions) (mtx *MultiTx, err error) {
-	mtx = new(MultiTx)
-	mtx.tx, err = beginMultiTx(ctx, readOnlyOpts(opts), mn.txBeginners()...)
+func (m *MultiNode) BeginTx(ctx context.Context, opts *sql.TxOptions) (mtx *MultiTx, err error) {
+	mtx = &MultiTx{
+		errCallback: m.errCallback,
+	}
+
+	mtx.tx, err = beginMultiTx(ctx, readOnlyOpts(opts), m.txBeginners(), m.errCallback)
 	return mtx, err
 }
 
 // Begin runs BeginTx with context.Background().
 // It is highly recommended to stick with the contexted variant in parallel executions.
 // This method is primarily included for consistency.
-func (mn MultiNode) Begin() (*MultiTx, error) {
-	return mn.BeginTx(context.Background(), nil)
+func (m *MultiNode) Begin() (*MultiTx, error) {
+	return m.BeginTx(context.Background(), nil)
 }

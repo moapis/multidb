@@ -11,6 +11,12 @@ import (
 	sm "github.com/DATA-DOG/go-sqlmock"
 )
 
+func testErrCallback(t *testing.T) func(error) {
+	return func(err error) {
+		//t.Logf("errCallback: %v", err)
+	}
+}
+
 // Simple tests for the wrapper methods
 func TestMultiNode_General(t *testing.T) {
 	t.Log("ExecContext")
@@ -18,7 +24,11 @@ func TestMultiNode_General(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mn := MultiNode(mdb.All())
+
+	mn, err := mdb.MultiNode(0, testErrCallback(t))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, mock := range mocks {
 		mock.ExpectExec(testQuery).WithArgs(1).WillReturnResult(sm.NewResult(2, 3))
@@ -37,7 +47,10 @@ func TestMultiNode_General(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mn = MultiNode(mdb.All())
+	mn, err = mdb.MultiNode(0, testErrCallback(t))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, mock := range mocks {
 		mock.ExpectExec(testQuery).WithArgs(1).WillReturnResult(sm.NewResult(2, 3))
@@ -57,7 +70,10 @@ func TestMultiNode_General(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mn = MultiNode(mdb.All())
+	mn, err = mdb.MultiNode(0, testErrCallback(t))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
@@ -80,7 +96,10 @@ func TestMultiNode_General(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mn = MultiNode(mdb.All())
+	mn, err = mdb.MultiNode(0, testErrCallback(t))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
@@ -103,7 +122,10 @@ func TestMultiNode_General(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mn = MultiNode(mdb.All())
+	mn, err = mdb.MultiNode(0, testErrCallback(t))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
@@ -122,7 +144,10 @@ func TestMultiNode_General(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mn = MultiNode(mdb.All())
+	mn, err = mdb.MultiNode(0, testErrCallback(t))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, mock := range mocks {
 		mock.ExpectQuery(testQuery).WithArgs(1).WillReturnRows(sm.NewRows([]string{"some"}).AddRow(want))
@@ -142,7 +167,11 @@ func TestMultiNode_BeginTx(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mn := MultiNode(mdb.All())
+
+	mn, err := mdb.MultiNode(0, testErrCallback(t))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, mock := range mocks {
 		mock.ExpectBegin()
@@ -162,7 +191,11 @@ func TestMultiNode_Begin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mn := MultiNode(mdb.All())
+
+	mn, err := mdb.MultiNode(0, testErrCallback(t))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, mock := range mocks {
 		mock.ExpectBegin()
@@ -182,7 +215,11 @@ func BenchmarkMultiNode_txBeginners(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	mn := MultiNode(mdb.All())
+
+	mn, err := mdb.MultiNode(0, nil)
+	if err != nil {
+		b.Fatal(err)
+	}
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {

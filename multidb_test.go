@@ -10,7 +10,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"os"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -27,6 +29,7 @@ const (
 
 var (
 	mock sm.Sqlmock
+	mdb  *MultiDB
 )
 
 func TestMain(m *testing.M) {
@@ -35,6 +38,145 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 	os.Exit(m.Run())
+}
+
+var errTest = errors.New("A test error")
+
+func TestNoMasterErr(t *testing.T) {
+	err := error(&NoMasterErr{errTest})
+
+	want := fmt.Sprintf(errNoMaster, errTest)
+	got := err.Error()
+	if got != want {
+		t.Errorf("NoMasterErr.Error() = %s, want %s", got, want)
+	}
+
+	target := errors.Unwrap(err)
+	if target != errTest {
+		t.Errorf("NoMasterErr.Unwrap() = %v, want %v", target, errTest)
+	}
+}
+
+func Test_useFactor(t *testing.T) {
+	stats := new(sql.DB).Stats()
+
+	tests := []struct {
+		name  string
+		stats *sql.DBStats
+		want  float64
+	}{
+		{
+			"empty DB",
+			&stats,
+			0,
+		},
+		{
+			"NaN",
+			&sql.DBStats{
+				MaxOpenConnections: 0,
+				InUse:              0,
+			},
+			0,
+		},
+		{
+			"Inf",
+			&sql.DBStats{
+				MaxOpenConnections: 0,
+				InUse:              1,
+			},
+			math.Inf(1),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := useFactor(tt.stats); got != tt.want {
+				t.Errorf("useFactor() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_dbSorter(t *testing.T) {
+	sorter := dbSorter{
+		stats: []*sql.DBStats{
+			// NaN
+			{
+				MaxOpenConnections: 0,
+				InUse:              0,
+			},
+			{
+				MaxOpenConnections: 0,
+				InUse:              1,
+			},
+			{
+				MaxOpenConnections: 10,
+				InUse:              0,
+			},
+		},
+		names: []string{
+			"one",
+			"two",
+			"three",
+		},
+	}
+
+	if ln := sorter.Len(); ln != len(sorter.stats) {
+		t.Errorf("dbSorter.Len = %v, want %v", ln, len(sorter.stats))
+	}
+
+	if less := sorter.Less(1, 2); less {
+		t.Errorf("dbSorter.Less = %v, want %v", less, false)
+	}
+
+	want := dbSorter{
+		stats: []*sql.DBStats{
+			sorter.stats[1],
+			sorter.stats[0],
+			sorter.stats[2],
+		},
+		names: []string{
+			sorter.names[1],
+			sorter.names[0],
+			sorter.names[2],
+		},
+	}
+
+	sorter.Swap(0, 1)
+
+	if !reflect.DeepEqual(sorter, want) {
+		t.Errorf("dbSorter.Swap = \n%v\nwant:\n%v", sorter, want)
+	}
+}
+
+func Test_readOnlyOpts(t *testing.T) {
+	tests := []struct {
+		name string
+		opts *sql.TxOptions
+		want *sql.TxOptions
+	}{
+		{
+			"Nil opts",
+			nil,
+			&sql.TxOptions{ReadOnly: true},
+		},
+		{
+			"ReadOnly true",
+			&sql.TxOptions{ReadOnly: true},
+			&sql.TxOptions{ReadOnly: true},
+		},
+		{
+			"Isolation level",
+			&sql.TxOptions{Isolation: sql.LevelLinearizable},
+			&sql.TxOptions{Isolation: sql.LevelLinearizable, ReadOnly: true},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := readOnlyOpts(tt.opts); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("readOnlyOpts() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
 
 func TestMultiDB_Close(t *testing.T) {
@@ -47,7 +189,7 @@ func TestMultiDB_Close(t *testing.T) {
 
 	mock.ExpectClose()
 
-	mdb.Add(NewNode("ok", db))
+	mdb.Add("ok", db)
 
 	db, mock, err = sm.New()
 	if err != nil {
@@ -56,25 +198,28 @@ func TestMultiDB_Close(t *testing.T) {
 
 	mock.ExpectClose().WillReturnError(sql.ErrConnDone)
 
-	mdb.Add(NewNode("err", db))
+	mdb.Add("err", db)
 
 	err = mdb.Close()
-	if err != sql.ErrConnDone {
+	if !errors.Is(err, sql.ErrConnDone) {
 		t.Errorf("mdb.Close() err = %v, want %v", err, sql.ErrConnDone)
 	}
 }
 
 func TestMultiDB_Add_Delete(t *testing.T) {
-	nodes := []*Node{
-		{"one", &sql.DB{}},
-		{"two", &sql.DB{}},
-		{"three", &sql.DB{}},
+	mdb := &MultiDB{
+		nodes: map[string]*sql.DB{
+			"one":   new(sql.DB),
+			"two":   new(sql.DB),
+			"three": new(sql.DB),
+		},
 	}
 
-	mdb := new(MultiDB)
-
-	mdb.Add(nodes...)
+	mdb.Add("four", new(sql.DB))
 	mdb.Delete("one", "two")
+
+	mdb.nmu.RLock()
+	mdb.nmu.RUnlock()
 }
 
 const testMasterQuery = "select ismaster"
@@ -98,7 +243,7 @@ func TestMultiDB_selectMaster(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		mdb.Add(NewNode(k, db))
+		mdb.Add(k, db)
 	}
 
 	mocks["master"].ExpectQuery(testMasterQuery).WillDelayFor(100 * time.Millisecond).WillReturnRows(sm.NewRows([]string{"master"}).AddRow(true))
@@ -116,26 +261,37 @@ func TestMultiDB_selectMaster(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if got.name != "master" {
+
+		mdb.nmu.RLock()
+		if got != mdb.nodes["master"] {
 			t.Errorf("mdb.selectMaster() = %v, want %v", got, "master")
 		}
+		mdb.nmu.RUnlock()
 	}
 
-	delete(mocks, "master")
 	mocks["slave"].ExpectQuery(testMasterQuery).WillDelayFor(50 * time.Millisecond).WillReturnRows(sm.NewRows([]string{"master"}).AddRow(false))
 	mocks["borked"].ExpectQuery(testMasterQuery).WillDelayFor(time.Second).WillReturnRows(sm.NewRows([]string{"master"}).AddRow(false))
 	mocks["errored"].ExpectQuery(testMasterQuery).WillReturnError(sql.ErrConnDone)
 
-	mdb.master.Load().(*Node).Close()
+	mdb.master.Load().(*sql.DB).Close()
+	mdb.Delete("master")
 
 	ctx, cancel = context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	got, err := mdb.SelectMaster(ctx)
-	_, ok := err.(*MultiError)
-	if !ok {
-		t.Errorf("mdb.selectMaster() err = %T, want %T", err, MultiError{})
+	wantErrs := []error{
+		&NoMasterErr{},
+		sql.ErrConnDone,
 	}
+
+	got, err := mdb.SelectMaster(ctx)
+
+	for _, w := range wantErrs {
+		if !errors.As(err, &w) {
+			t.Errorf("mdb.selectMaster() err = %T, want %T", err, w)
+		}
+	}
+
 	if got != nil {
 		t.Errorf("mdb.selectMaster() = %v, want %v", got, nil)
 	}
@@ -143,7 +299,7 @@ func TestMultiDB_selectMaster(t *testing.T) {
 	mdb = &MultiDB{}
 
 	got, err = mdb.SelectMaster(ctx)
-	if err == nil || err.Error() != ErrNoNodes {
+	if err == nil || err != ErrNoNodes {
 		t.Errorf("electMaster() err = %v, want %v", err, ErrNoNodes)
 	}
 	if got != nil {
@@ -175,10 +331,8 @@ func TestMultiDB_MasterTx(t *testing.T) {
 		{
 			"Single node",
 			&MultiDB{
-				nm: nodeMap{
-					nodes: map[string]*Node{
-						"one": {"one", db},
-					},
+				nodes: map[string]*sql.DB{
+					"one": db,
 				},
 				MasterFunc: drivers.MasterFunc(testMasterQuery),
 			},
@@ -215,15 +369,13 @@ func TestMultiDB_Node(t *testing.T) {
 			"No nodes",
 			&MultiDB{},
 			false,
-			errors.New(ErrNoNodes),
+			ErrNoNodes,
 		},
 		{
 			"Single node",
 			&MultiDB{
-				nm: nodeMap{
-					nodes: map[string]*Node{
-						"one": {"one", &sql.DB{}},
-					},
+				nodes: map[string]*sql.DB{
+					"one": new(sql.DB),
 				},
 			},
 			true,
@@ -232,12 +384,10 @@ func TestMultiDB_Node(t *testing.T) {
 		{
 			"Multiple nodes",
 			&MultiDB{
-				nm: nodeMap{
-					nodes: map[string]*Node{
-						"one":   {"one", &sql.DB{}},
-						"two":   {"two", &sql.DB{}},
-						"three": {"three", &sql.DB{}},
-					},
+				nodes: map[string]*sql.DB{
+					"one":   new(sql.DB),
+					"two":   new(sql.DB),
+					"three": new(sql.DB),
 				},
 			},
 			true,
@@ -277,15 +427,13 @@ func TestMultiDB_NodeTx(t *testing.T) {
 			"No nodes",
 			&MultiDB{},
 			false,
-			errors.New(ErrNoNodes),
+			ErrNoNodes,
 		},
 		{
 			"Single node",
 			&MultiDB{
-				nm: nodeMap{
-					nodes: map[string]*Node{
-						"one": {"one", db},
-					},
+				nodes: map[string]*sql.DB{
+					"one": db,
 				},
 			},
 			true,
@@ -309,18 +457,16 @@ func TestMultiDB_NodeTx(t *testing.T) {
 
 func TestMultiDB_All(t *testing.T) {
 	mdb := &MultiDB{
-		nm: nodeMap{
-			nodes: map[string]*Node{
-				"one":   {"one", &sql.DB{}},
-				"two":   {"two", &sql.DB{}},
-				"three": {"three", &sql.DB{}},
-			},
+		nodes: map[string]*sql.DB{
+			"one":   new(sql.DB),
+			"two":   new(sql.DB),
+			"three": new(sql.DB),
 		},
 	}
 
 	nodes := mdb.All()
-	if len(nodes) != len(mdb.nm.nodes) {
-		t.Errorf("mdb.All() got len %d, want len %d", len(nodes), len(mdb.nm.nodes))
+	if len(nodes) != len(mdb.nodes) {
+		t.Errorf("mdb.All() got len %d, want len %d", len(nodes), len(mdb.nodes))
 	}
 }
 
@@ -337,17 +483,15 @@ func TestMultiDB_MultiNode(t *testing.T) {
 			&MultiDB{},
 			0,
 			0,
-			errors.New(ErrNoNodes),
+			ErrNoNodes,
 		},
 		{
 			"No limit",
 			&MultiDB{
-				nm: nodeMap{
-					nodes: map[string]*Node{
-						"one":   {"one", &sql.DB{}},
-						"two":   {"two", &sql.DB{}},
-						"three": {"three", &sql.DB{}},
-					},
+				nodes: map[string]*sql.DB{
+					"one":   new(sql.DB),
+					"two":   new(sql.DB),
+					"three": new(sql.DB),
 				},
 			},
 			0,
@@ -357,12 +501,10 @@ func TestMultiDB_MultiNode(t *testing.T) {
 		{
 			"Two nodes",
 			&MultiDB{
-				nm: nodeMap{
-					nodes: map[string]*Node{
-						"one":   {"one", &sql.DB{}},
-						"two":   {"two", &sql.DB{}},
-						"three": {"three", &sql.DB{}},
-					},
+				nodes: map[string]*sql.DB{
+					"one":   new(sql.DB),
+					"two":   new(sql.DB),
+					"three": new(sql.DB),
 				},
 			},
 			2,
@@ -372,12 +514,10 @@ func TestMultiDB_MultiNode(t *testing.T) {
 		{
 			"Too many",
 			&MultiDB{
-				nm: nodeMap{
-					nodes: map[string]*Node{
-						"one":   {"one", &sql.DB{}},
-						"two":   {"two", &sql.DB{}},
-						"three": {"three", &sql.DB{}},
-					},
+				nodes: map[string]*sql.DB{
+					"one":   new(sql.DB),
+					"two":   new(sql.DB),
+					"three": new(sql.DB),
 				},
 			},
 			4,
@@ -387,14 +527,20 @@ func TestMultiDB_MultiNode(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.mdb.MultiNode(tt.max)
+			got, err := tt.mdb.MultiNode(tt.max, func(error) {})
 			if fmt.Sprint(tt.wantErr) != fmt.Sprint(err) {
 				t.Errorf("MultiDB.MultiNode() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
-			if len(got) != tt.want {
-				t.Errorf("MultiDB.MultiNode() = %v, want %v", got, tt.want)
+			if tt.wantErr == nil {
+				if len(got.nodes) != tt.want {
+					t.Errorf("MultiDB.MultiNode() = %v, want %v", got, tt.want)
+				}
+
+				if got.errCallback == nil {
+					t.Errorf("MultiDB.MultiNode() errCallback = %v, want %v", got, "func(error)")
+				}
 			}
 		})
 	}
@@ -411,7 +557,7 @@ func TestMultiDB_MultiNodeTx(t *testing.T) {
 
 		mock.ExpectBegin()
 
-		mdb.Add(NewNode(strconv.Itoa(i), db))
+		mdb.Add(strconv.Itoa(i), db)
 	}
 
 	tests := []struct {
@@ -426,7 +572,7 @@ func TestMultiDB_MultiNodeTx(t *testing.T) {
 			&MultiDB{},
 			0,
 			0,
-			errors.New(ErrNoNodes),
+			ErrNoNodes,
 		},
 		{
 			"No limit",
@@ -438,14 +584,20 @@ func TestMultiDB_MultiNodeTx(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.mdb.MultiTx(context.Background(), nil, tt.max)
+			got, err := tt.mdb.MultiTx(context.Background(), nil, tt.max, func(error) {})
 			if fmt.Sprint(tt.wantErr) != fmt.Sprint(err) {
 				t.Errorf("MultiDB.MultiTx() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
-			if tt.want > 0 && len(got.tx) != tt.want {
-				t.Errorf("MultiDB.MultiTx() = %v, want %v", got, tt.want)
+			if tt.wantErr == nil {
+				if len(got.tx) != tt.want {
+					t.Errorf("MultiDB.MultiTx() = %v, want %v", got, tt.want)
+				}
+
+				if got.errCallback == nil {
+					t.Errorf("MultiDB.MultiTx() errCallback = %#v, want %v", got, "func(error)")
+				}
 			}
 		})
 	}
