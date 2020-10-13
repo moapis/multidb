@@ -204,6 +204,7 @@ func ExampleErrCallbackFunc() {
 		mu.Unlock()
 	}
 
+	mdb := new(MultiDB)
 	_, _ = mdb.MultiNode(3, ecb)
 	// Continue running queries
 }
