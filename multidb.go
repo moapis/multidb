@@ -90,20 +90,18 @@ func readOnlyOpts(opts *sql.TxOptions) *sql.TxOptions {
 	return opts
 }
 
+// MasterFunc should return true if the passed DB is the Master,
+// typically by executing a driver specific query.
+// False should be returned in all other cases.
+// In case the query fails, an error should be returned.
+type MasterFunc func(context.Context, *sql.DB) (bool, error)
+
 // MultiDB holds the multiple DB objects, capable of Writing and Reading.
 type MultiDB struct {
-	// nodes is protected by nmu
-	nodes map[string]*sql.DB
-	nmu   sync.RWMutex
-
-	// MasterFunc should return true if the passed DB is the Master,
-	// typically by executing a driver specific query.
-	// False should be returned in all other cases.
-	// In case the query fails, an error should be returned.
-	MasterFunc func(context.Context, *sql.DB) (bool, error)
-
-	// holds the master node
-	master atomic.Value
+	nodes      map[string]*sql.DB
+	nmu        sync.RWMutex // Protects nodes
+	MasterFunc MasterFunc
+	master     atomic.Value // holds the master DB node
 }
 
 // sortedNames should be run inside a read-locked Mutex

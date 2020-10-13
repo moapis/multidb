@@ -10,7 +10,6 @@ install:
 
 script:
   - go test -race -coverprofile=multidb.out -covermode=atomic
-  - go test -race -coverprofile=drivers.out -covermode=atomic ./drivers
   - go test -benchmem -bench . # Just a quick check if the benchmarks are valid
   - (cd ./integration/sqlboiler && ./ci.sh) # SQLBoiler interface checks
 

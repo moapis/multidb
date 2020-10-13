@@ -2,7 +2,7 @@
 // Use of this source code is governed by a License that can be found in the LICENSE file.
 // SPDX-License-Identifier: BSD-3-Clause
 
-package drivers
+package multidb
 
 import (
 	"context"
@@ -14,13 +14,13 @@ import (
 
 const testMasterQuery = "select ismaster"
 
-func TestMasterFunc(t *testing.T) {
+func TestIsMaster(t *testing.T) {
 	db, mock, err := sm.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	mf := MasterFunc(testMasterQuery)
+	mf := IsMaster(testMasterQuery)
 
 	mock.ExpectQuery(testMasterQuery).
 		WillReturnRows(sm.NewRows([]string{"ismaster"}).AddRow(true))
