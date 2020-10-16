@@ -18,7 +18,6 @@ import (
 	"time"
 
 	sm "github.com/DATA-DOG/go-sqlmock"
-	"github.com/moapis/multidb/drivers"
 )
 
 const (
@@ -222,14 +221,12 @@ func TestMultiDB_Add_Delete(t *testing.T) {
 	mdb.nmu.RUnlock()
 }
 
-const testMasterQuery = "select ismaster"
-
 // Includes test for mdb.Master()
 func TestMultiDB_selectMaster(t *testing.T) {
 	mocks := map[string]sm.Sqlmock{"master": nil, "slave": nil, "borked": nil, "errored": nil}
 
 	mdb := &MultiDB{
-		MasterFunc: drivers.MasterFunc(testMasterQuery),
+		MasterFunc: IsMaster(testMasterQuery),
 	}
 
 	for k := range mocks {
@@ -334,7 +331,7 @@ func TestMultiDB_MasterTx(t *testing.T) {
 				nodes: map[string]*sql.DB{
 					"one": db,
 				},
-				MasterFunc: drivers.MasterFunc(testMasterQuery),
+				MasterFunc: IsMaster(testMasterQuery),
 			},
 			context.Background(),
 			false,
