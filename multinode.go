@@ -79,9 +79,6 @@ func (m *MultiNode) txBeginners() map[string]txBeginner {
 	return txb
 }
 
-// BUG(muhlemmer): MultiNode type doescommit uasgeusag not implement boil.Beginner
-// https://github.com/moapis/multidb/issues/2
-
 // BeginTx runs sql.DB.BeginTx on the Nodes in separate Go routines.
 // The transactions are created in ReadOnly mode.
 // It waits for all the calls to return or the context to expire.
