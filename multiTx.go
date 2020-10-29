@@ -76,7 +76,7 @@ type MultiTx struct {
 }
 
 // cancelWait cancels a previously running operation on TX
-// and waits untill all routines are cleaned up.
+// and waits until all routines are cleaned up.
 func (m *MultiTx) cancelWait() {
 	if m.cancel != nil {
 		m.cancel()
@@ -192,7 +192,7 @@ func (m *MultiTx) ExecContext(ctx context.Context, query string, args ...interfa
 }
 
 // Exec runs ExecContext with context.Background().
-// It is highly recommended to stick with the contexted variant in paralell executions.
+// It is highly recommended to stick with the contexted variant in paralel executions.
 // This method is primarily included to implement boil.Executor.
 func (m *MultiTx) Exec(query string, args ...interface{}) (sql.Result, error) {
 	return m.ExecContext(context.Background(), query, args...)

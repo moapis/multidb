@@ -1,6 +1,6 @@
 [![Build Status](https://travis-ci.org/moapis/multidb.svg?branch=main)](https://travis-ci.org/moapis/multidb)
 [![codecov](https://codecov.io/gh/moapis/multidb/branch/main/graph/badge.svg)](https://codecov.io/gh/moapis/multidb)
-[![GoDoc](https://godoc.org/github.com/moapis/multidb?status.svg)](https://godoc.org/github.com/moapis/multidb)
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/moapis/multidb)](https://pkg.go.dev/github.com/moapis/multidb)
 [![Go Report Card](https://goreportcard.com/badge/github.com/moapis/multidb)](https://goreportcard.com/report/github.com/moapis/multidb)
 
 
@@ -49,7 +49,7 @@ go test ./...
 
 ## Documentation and examples
 
-[Godoc.org](https://godoc.org/github.com/moapis/multidb)
+[pkg.go.dev](https://pkg.go.dev/github.com/moapis/multidb)
 
 ## Copyright and license
 

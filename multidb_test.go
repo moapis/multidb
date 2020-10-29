@@ -9,9 +9,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"math"
-	"os"
 	"reflect"
 	"strconv"
 	"testing"
@@ -25,19 +23,6 @@ const (
 	testDSN      = "file::memory:"
 	testQuery    = "select;"
 )
-
-var (
-	mock sm.Sqlmock
-	mdb  *MultiDB
-)
-
-func TestMain(m *testing.M) {
-	var err error
-	if _, mock, err = sm.NewWithDSN(testDSN); err != nil {
-		log.Fatal(err)
-	}
-	os.Exit(m.Run())
-}
 
 var errTest = errors.New("A test error")
 
