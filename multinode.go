@@ -40,6 +40,9 @@ func (m *MultiNode) Exec(query string, args ...interface{}) (sql.Result, error) 
 // The first non-error result is returned immediately
 // and errors from the other Nodes will be ignored.
 //
+// It is important to cancel the context as soon as possible after scanning the rows.
+// Preferably, before any next operation on MultiNode.
+//
 // If all nodes respond with the same error, that exact error is returned as-is.
 // If there is a variety of errors, they will be embedded in a MultiError return.
 //
@@ -58,6 +61,9 @@ func (m *MultiNode) Query(query string, args ...interface{}) (*sql.Rows, error) 
 // QueryRowContext runs sql.DB.QueryRowContext on the Nodes in separate Go routines.
 // The first error free result is returned immediately.
 // If all resulting sql.Row objects contain an error, only the last Row containing an error is returned.
+//
+// It is important to cancel the context as soon as possible after scanning the row.
+// Preferably, before any next operation on MultiNode.
 func (m *MultiNode) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	return multiQueryRow(ctx, nil, m.nodes, m.errCallback, query, args...)
 }
