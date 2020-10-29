@@ -186,6 +186,12 @@ func TestNodeError(t *testing.T) {
 		t.Errorf("NodeError.Error() = %s, want %s", got, want)
 	}
 
+	want = "One"
+	got = err.(*NodeError).Name()
+	if got != want {
+		t.Errorf("NodeError.Name() = %s, want %s", got, want)
+	}
+
 	gotErr := errors.Unwrap(err)
 	if gotErr != wrapped {
 		t.Errorf("NodeError.Unwrap() = %v, want %v", gotErr, wrapped)

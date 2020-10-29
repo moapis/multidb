@@ -84,6 +84,11 @@ func (ne *NodeError) Error() string {
 	return fmt.Sprintf("Node %s: %v", ne.name, ne.wrapped)
 }
 
+// Name of the node that experienced the error
+func (ne *NodeError) Name() string {
+	return ne.name
+}
+
 func (ne *NodeError) Unwrap() error {
 	return ne.wrapped
 }
