@@ -42,6 +42,41 @@ var (
 	mdb *MultiDB
 )
 
+func ExampleMultiDB_Add() {
+	const connStr = "user=pqgotest dbname=pqgotest host=%s.moapis.org"
+
+	hosts := []string{
+		"db1",
+		"db2",
+		"db3",
+	}
+
+	for _, host := range hosts {
+		db, err := sql.Open("postgres", fmt.Sprintf(connStr, host))
+		if err != nil {
+			panic(err)
+		}
+
+		if old, ok := mdb.Add(host, db); ok {
+			// Close error ignored, we don't want to interupt
+			// adding of new, healthy nodes.
+			old.Close()
+		}
+	}
+}
+
+func ExampleMultiDB_Delete() {
+	deleted := mdb.Delete("db1", "db2", "db3")
+
+	for name, db := range deleted {
+		if err := db.Close(); err != nil {
+			panic(
+				fmt.Errorf("Closing %s: %w", name, err),
+			)
+		}
+	}
+}
+
 func ExampleMultiDB_AutoMasterSelector() {
 	ms := mdb.AutoMasterSelector(10 * time.Second)
 

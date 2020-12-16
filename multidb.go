@@ -161,28 +161,45 @@ func (mdb *MultiDB) Close() error {
 	return checkMultiError(errs)
 }
 
-// Add DB Node to MultiDB
-func (mdb *MultiDB) Add(name string, db *sql.DB) {
+// Add DB Node to MultiDB.
+//
+// If a DB with the same name already exists, it is replaced.
+// In that case the "old" DB is returned and "ok" is set to true.
+// It is the responisbilty of the caller to close any obsolete DB.
+func (mdb *MultiDB) Add(name string, db *sql.DB) (old *sql.DB, ok bool) {
 	mdb.nmu.Lock()
 
 	if mdb.nodes == nil {
 		mdb.nodes = make(map[string]*sql.DB)
 	}
 
+	old, ok = mdb.nodes[name]
+
 	mdb.nodes[name] = db
 
 	mdb.nmu.Unlock()
+	return old, ok
 }
 
-// Delete DB Nodes from MultiDB, identified by names
-func (mdb *MultiDB) Delete(names ...string) {
+// Delete DB Nodes from MultiDB, identified by names.
+//
+// Exisiting DBs are returned in a map, indexed by name.
+// It is the responisbilty of the caller to close any obsolete DB.
+func (mdb *MultiDB) Delete(names ...string) (deleted map[string]*sql.DB) {
+	deleted = make(map[string]*sql.DB, len(names))
+
 	mdb.nmu.Lock()
 
 	for _, name := range names {
-		delete(mdb.nodes, name)
+		if db, ok := mdb.nodes[name]; ok {
+			deleted[name] = db
+			delete(mdb.nodes, name)
+		}
 	}
 
 	mdb.nmu.Unlock()
+
+	return deleted
 }
 
 // SelectMaster runs mdb.MasterFunc against all Nodes.
