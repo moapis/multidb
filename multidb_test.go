@@ -199,8 +199,29 @@ func TestMultiDB_Add_Delete(t *testing.T) {
 		},
 	}
 
-	mdb.Add("four", new(sql.DB))
-	mdb.Delete("one", "two")
+	if _, ok := mdb.Add("four", new(sql.DB)); ok {
+		t.Error("mdb.Add(): Did not expect returned DB")
+	}
+
+	if _, ok := mdb.Add("three", new(sql.DB)); !ok {
+		t.Error("mdb.Add(): Expected returned DB")
+	}
+
+	want := map[string]*sql.DB{
+		"one": new(sql.DB),
+		"two": new(sql.DB),
+	}
+	got := mdb.Delete("one", "two")
+
+	if len(got) != len(want) {
+		t.Errorf("mdb.Add() =\n%v\nwant\n%v", got, want)
+	}
+
+	for k := range want {
+		if _, ok := got[k]; !ok {
+			t.Errorf("mdb.Add() =\n%v\nwant\n%v", got, want)
+		}
+	}
 
 	mdb.nmu.RLock()
 	mdb.nmu.RUnlock()
